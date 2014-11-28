@@ -162,7 +162,8 @@
   (scm-export-file (current-rev) (plt-repository) "pkgs/plt-services/meta/drdr/pkgs.rktd" tmp-file)
   ;; Read it in
   (define val (file->value tmp-file))
-  (delete-file tmp-file))
+  (delete-file tmp-file)
+  val)
 
 (define (test-revision rev)
   (define rev-dir (revision-dir rev))
