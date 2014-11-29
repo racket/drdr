@@ -16,9 +16,9 @@
 (define (test-run-loud n)
   (test
    #:failure-prefix (number->string n)
-   (status-output-log (run-loud n))
+   (apply set (status-output-log (run-loud n)))
    =>
-   (for/list ([i (in-range n)])
+   (for/set ([i (in-range n)])
      ((if (even? i)
           make-stderr
           make-stdout)
