@@ -219,8 +219,7 @@
                (semaphore-post dir-sema)]
               [else
                (define pth-timeout
-                 (or (path-timeout pth)
-                     (current-subprocess-timeout-seconds)))
+                 (current-subprocess-timeout-seconds))
                (define pth-cmd/general
                  (path-command-line pth pth-timeout))
                (define-values

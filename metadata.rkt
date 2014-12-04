@@ -4,7 +4,6 @@
          "scm.rkt")
 
 (define PROP:command-line "drdr:command-line")
-(define PROP:timeout "drdr:timeout")
 
 (define (path-command-line a-path a-timeout)
   (define suffix (filename-extension a-path))
@@ -24,9 +23,6 @@
      (cons (first l)
            (map replace-* (rest l)))]))
 
-(define (path-timeout a-path)
-  (get-prop a-path 'drdr:timeout #f))
-
 (define (path-responsible a-path)
   (get-prop a-path 'responsible #:as-string? #t))
 
@@ -35,14 +31,12 @@
 
 (provide/contract
  [PROP:command-line string?]
- [PROP:timeout string?]
  [path-responsible 
   (path-string? . -> . (or/c string? false/c))]
  [path-command-line 
   (-> path-string? exact-nonnegative-integer? 
       (or/c (cons/c symbol? (listof string?)) false/c))]
- [path-random? (path-string? . -> . boolean?)]
- [path-timeout (path-string? . -> . (or/c exact-nonnegative-integer? false/c))])
+ [path-random? (path-string? . -> . boolean?)])
 
 ;;; Property lookup
 (provide props-cache)
