@@ -219,7 +219,10 @@
                (semaphore-post dir-sema)]
               [else
                (define pth-timeout
-                 (current-subprocess-timeout-seconds))
+                 ;; xxx assume that paths will enforce their own
+                 ;; timeouts with raco test, but protect ourselves a
+                 ;; little
+                 (current-make-install-timeout-seconds))
                (define pth-cmd/general
                  (path-command-line pth pth-timeout))
                (define-values
