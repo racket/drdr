@@ -168,8 +168,8 @@
         (for/or ([p (in-list ps)])
           (not (rendering-random? 
                 (log-rendering 
-                 (build-path (revision-log-dir cur-rev)
-                             p)))))
+                 (build-path* (revision-log-dir cur-rev)
+                              p)))))
         (not (symbol=? id 'changes))))))
   (define mail-recipients
     (remove-duplicates
@@ -209,7 +209,7 @@
                                             #:when (not 
                                                     (rendering-random?
                                                      (log-rendering 
-                                                      (build-path
+                                                      (build-path*
                                                        (revision-log-dir cur-rev)
                                                        f)))))
                                    (format "    ~a" (path->url f)))
@@ -242,6 +242,11 @@
                                 empty
                                 (list (apply string-append (add-between responsibles " ")))))))
 ; End Email
+
+(define (build-path* x y)
+  (bytes->path
+   (bytes-append (path->bytes x)
+                 (path->bytes y))))
 
 (define (trunk-path pth)
   (define rev (current-rev))
