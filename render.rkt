@@ -641,7 +641,7 @@
                        "Help"))
            @div[[(class "help")]]{
                                   @h1{What is DrDr?}
-                                   @p{DrDr is a server at @a[[(href "http://www.byu.edu")]]{Brigham Young University} that builds
+                                   @p{DrDr is a server at @a[[(href "http://www.indiana.edu/")]]{Indiana University} that builds
                                                           and "tests" every push to the Racket code base.}
                                    
                                    @h1{What kind of server?}
