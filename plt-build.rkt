@@ -216,7 +216,7 @@
                (semaphore-post dir-sema)]
               [else
                (define pth-timeout
-                 (current-make-install-timeout-seconds))
+                 (current-subprocess-timeout-seconds))
                (define pth-cmd/general
                  (path-command-line pth pth-timeout))
                (define-values
