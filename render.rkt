@@ -884,7 +884,7 @@
                                                   `(td ([sorttable_customkey ,(number->string v)])
                                                        ,(number->string/zero v)))
                                                 (list timeout unclean stderr changes))
-                                         (td ,(format-responsible responsible-party)))])))])
+                                         (td ,committer))])))])
                           (list-limit
                            how-many-revs offset
                            all-revs))))
