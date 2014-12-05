@@ -60,8 +60,10 @@
   (ormap
    (λ (l)
      (and (stdout? l)
-          (regexp-match #rx"DrDr: This file has random output."
-                        (stdout-bytes l))))
+          (or (regexp-match #rx"raco test: @(test-random #t)"
+                            (stdout-bytes l))
+              (regexp-match #rx"DrDr: This file has random output."
+                            (stdout-bytes l)))))
    output-log))
 
 (define (responsible-append x y)
