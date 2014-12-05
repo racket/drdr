@@ -681,7 +681,7 @@
                                    @p{From the data collected from the run, DrDr computes the total test time and whether output has "changed" since the last time the file was tested.}
                                    
                                    @h1{What output patterns constitute a "change"?}
-                                   @p{At the most basic level, if the bytes are different. However, there are a few subtleties. First, DrDr knows to ignore the result of @code{time}. Second, the standard output and standard error streams are compared independently. Finally, if the output stream contains @litchar{DrDr: This file has random output.} then changes do not affect any reporting DrDr would otherwise perform. The difference display pages present changed lines with a @span[([class "difference"])]{unique background}.}
+                                   @p{At the most basic level, if the bytes are different. However, there are a few subtleties. First, DrDr knows to ignore the result of @code{time}. Second, the standard output and standard error streams are compared independently. Finally, if the output stream contains @litchar{DrDr: This file has random output.} or @litchar{raco test: @"@"(test-random #t)} then changes do not affect any reporting DrDr would otherwise perform. The difference display pages present changed lines with a @span[([class "difference"])]{unique background}.}
 
                                    @h1{What do the green buttons do?}
                                    @p{They switch between revisions where there was a change from the previous revision.}
