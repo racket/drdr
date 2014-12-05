@@ -1,5 +1,6 @@
-#lang racket
-(require xml
+#lang racket/base
+(require racket/list
+         xml
          net/url
          tests/web-server/util
          "scm.rkt")

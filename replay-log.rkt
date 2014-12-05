@@ -1,9 +1,8 @@
-#lang racket
-(require "replay.rkt"
+#lang racket/base
+(require racket/cmdline
+         "replay.rkt"
          "cache.rkt"
          "status.rkt")
-
-; XXX Rewrite to work with logs in dbm
 
 (define the-log-file
   (command-line

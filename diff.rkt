@@ -1,5 +1,7 @@
-#lang racket
-(require "status.rkt")
+#lang racket/base
+(require racket/match
+         racket/list
+         "status.rkt")
 
 (define (timing? bs)
   (regexp-match #px#"cpu time: \\d+ real time: \\d+ gc time: \\d+" bs))

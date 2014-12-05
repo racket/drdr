@@ -1,5 +1,7 @@
-#lang racket
-(require (prefix-in racket: racket)
+#lang racket/base
+(require racket/match
+         racket/contract/base
+         (prefix-in racket: racket/base)
          "formats.rkt"
          "status.rkt")
 

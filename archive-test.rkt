@@ -1,4 +1,4 @@
-#lang racket
+#lang racket/base
 (require "path-utils.rkt"
          "archive.rkt"
          tests/eli-tester)

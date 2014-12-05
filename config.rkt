@@ -1,6 +1,7 @@
-#lang racket
-
-(require "cache.rkt"
+#lang racket/base
+(require racket/list
+         racket/contract/base
+         "cache.rkt"
          "dirstruct.rkt"
          "scm.rkt"
          "monitor-scm.rkt")

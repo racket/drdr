@@ -1,5 +1,7 @@
-#lang racket
-(require (planet jaymccarthy/job-queue)
+#lang racket/base
+(require racket/cmdline
+         racket/list
+         job-queue
          racket/system
          "config.rkt"
          "notify.rkt"

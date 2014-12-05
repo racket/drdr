@@ -1,5 +1,10 @@
-#lang racket
-(require "svn.rkt"
+#lang racket/base
+(require racket/contract/base
+         racket/port
+         racket/match
+         racket/list
+         racket/function
+         "svn.rkt"
          "path-utils.rkt"
          "dirstruct.rkt"
          net/url

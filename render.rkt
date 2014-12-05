@@ -1,5 +1,13 @@
-#lang at-exp racket
-(require racket/date
+#lang at-exp racket/base
+(require racket/list
+         racket/local
+         racket/function
+         racket/match
+         racket/file
+         racket/port
+         racket/string
+         racket/system
+         racket/date
          racket/runtime-path
          xml
          "config.rkt"
@@ -10,9 +18,6 @@
                     revision-trunk-dir)
          "status.rkt"
          "monitor-scm.rkt"
-         (only-in "metadata.rkt"
-                  PROP:command-line
-                  PROP:timeout)
          "formats.rkt"
          "path-utils.rkt"
          "analyze.rkt"
@@ -80,7 +85,7 @@
   (define prev-change-url (format "/previous-change/~a~a" the-rev the-base-path))
   (define next-change-url (format "/next-change/~a~a" the-rev the-base-path))
   (define cur-rev-url (format "/~a~a" "current" the-base-path))
-  ; XXX Don't special case top level
+  ;; XXX Don't special case top level
   (values (apply string-append 
                  (add-between (list* "DrDr" string-parts) " / "))
           `(span
@@ -290,11 +295,14 @@
     [else
      '" "]))
 
+(define (format-responsible r)
+  (string-append* (add-between (string-split r ",") ", ")))
+
 (define drdr-start-request (make-parameter #f))
 (define (footer)
   `(div ([id "footer"])
         "Powered by " (a ([href "http://racket-lang.org/"]) "Racket") ". "
-        "Written by " (a ([href "http://faculty.cs.byu.edu/~jay"]) "Jay McCarthy") ". "
+        "Written by " (a ([href "http://jeapostrophe.github.io"]) "Jay McCarthy") ". "
         (a ([href "/help"])
            "Need help?")
         (br)
@@ -385,7 +393,7 @@
                       ,breadcrumb
                       (table ([class "data"])
                              (tr (td "Responsible:")
-                                 (td ,responsible))
+                                 (td ,(format-responsible responsible)))
                              (tr (td "Command-line:") 
                                  (td ,@(add-between
                                         (map (lambda (s)
@@ -398,6 +406,7 @@
                                              "(timing data)")))
                              (tr (td "Timeout:") (td ,(if (timeout? log) checkmark-entity "")))
                              (tr (td "Exit Code:") (td ,(if (exit? log) (number->string (exit-code log)) "")))
+                             (tr (td "Random?") (td ,(if (rendering-random? the-log-rendering) "Yes" "No")))
                              (tr (td " ") (td (a ([href ,scm-url]) "View File"))))
                       ,(if (lc-zero? changed)
                            ""
@@ -533,7 +542,7 @@
                                                     (format "~a [~a: ~a]" s id (length llc)))))                                  
                                             `(div (a ([href ,(format "javascript:TocviewToggle(\"~a\",\"~a\");" rg-id rcss-id)])
                                                      (span ([id ,rg-id]) 9658) " "
-                                                     ,responsible
+                                                     ,(format-responsible responsible)
                                                      " " ,summary)
                                                   (blockquote 
                                                    ([id ,rcss-id]
@@ -596,7 +605,7 @@
                                                                  '" "
                                                                  checkmark-entity))))
                                                  (list timeout unclean stderr changes))
-                                          (td ,responsible-party))])
+                                          (td ,(format-responsible responsible-party)))])
                                   (sort files
                                         (match-lambda*
                                           [(list (list dir?1 name1 _)
@@ -626,7 +635,6 @@
            (link ([rel "stylesheet"] [type "text/css"] [href "/render.css"])))
      (body
       (div ([class "dirlog, content"])
-           ; XXX Use same function as above
            (span ([class "breadcrumb"])
                  (a ([class "parent"] [href "/"]) "DrDr") " / "
                  (span ([class "this"]) 
@@ -651,9 +659,7 @@
                                    @p{Only one build runs at a time and when none is running the git repository is polled every @,(number->string (current-monitoring-interval-seconds)) seconds.}
                                    
                                    @h1{How is the push "tested"?}
-                                   @p{Each file's @code{@,PROP:command-line} property is consulted. If it is the empty string, the file is ignored. If it is a string, then a single @code{~s} is replaced with the file's path, @code{racket}, @code{mzc}, @code{raco} with their path (for the current push), and @code{gracket} and @code{gracket-text} with @code{gracket}'s path (for the current push); then the resulting command-line is executed. 
-                                                  (Currently no other executables are allowed, so you can't @code{rm -fr /}.)
-                                                  If there is no property value, the default @code{raco test ~s} is used if the file's suffix is @code{.rkt}, @code{.ss}, @code{.scm}, @code{.sls}, or @code{.scrbl} and @code{racket -f ~s} is used if the file's suffix is @code{.rktl}.}
+                                   @p{Each file is run with @code{raco test ~s} is used if the file's suffix is @code{.rkt}, @code{.ss}, @code{.scm}, @code{.sls}, or @code{.scrbl}.}
                                    
                                    @p{The command-line is always executed with a fresh empty current directory which is removed after the run. But all the files share the same home directory and X server, which are both removed after each push's testing is complete.}
                                    
@@ -661,15 +667,12 @@
                                    
                                    @h1{How many files are "tested" concurrently?}
                                    @p{One per core, or @,(number->string (number-of-cpus)).}
-
-                                   @p{However, all @code{gracket} files are serialized so that one runs at a time. This is because GUI programs may be sensitive to screen-specific state such as window focus and there is only one screen available to all GUI programs. Historicallly, the @code{gracket} difference was essential before the GUI code was ported to Racket; but currently that is irrelevant. Therefore, you should not mark things as using @code{gracket} unless you anticipate they will actually cause such conflicts; nor should you mark anything as using @code{gracket} if it just has a different kind of race.}
                                    
                                    @h1{How long may a file run?}
-                                   @p{The execution timeout is @,(number->string (current-subprocess-timeout-seconds)) seconds by default, but the @code{@,PROP:timeout} property is used if @code{string->number} returns a number on it.}
+                                   @p{The execution timeout is @,(number->string (current-make-install-timeout-seconds)) seconds by default, but the code may set its own timeout internally and well-behaved tests will.}
                                    
                                    @h1{May these settings be set on a per-directory basis?}
-                                   @p{Yes; if the property is set on any ancestor directory, then its value is used for its descendents when theirs is not set.
-                                      }
+                                   @p{Yes, if the property is set on any ancestor directory, then its value is used for its descendents when theirs is not set.}
                                    
                                    @h1{What data is gathered during these runs?}
                                    @p{When each file is run the following is recorded: the start time, the command-line, the STDERR and STDOUT output, the exit code (unless there is a timeout), and the end time. All this information is presented in the per-file DrDr report page.}
@@ -678,7 +681,7 @@
                                    @p{From the data collected from the run, DrDr computes the total test time and whether output has "changed" since the last time the file was tested.}
                                    
                                    @h1{What output patterns constitute a "change"?}
-                                   @p{At the most basic level, if the bytes are different. However, there are a few subtleties. First, DrDr knows to ignore the result of @code{time}. Second, the standard output and standard error streams are compared independently. Finally, if the file has the @code{drdr:random} property, then changes do not affect any reporting DrDr would otherwise perform. The difference display pages present changed lines with a @span[([class "difference"])]{unique background}.}
+                                   @p{At the most basic level, if the bytes are different. However, there are a few subtleties. First, DrDr knows to ignore the result of @code{time}. Second, the standard output and standard error streams are compared independently. Finally, if the output stream contains @litchar{DrDr: This file has random output.} then changes do not affect any reporting DrDr would otherwise perform. The difference display pages present changed lines with a @span[([class "difference"])]{unique background}.}
 
                                    @h1{What do the green buttons do?}
                                    @p{They switch between revisions where there was a change from the previous revision.}
@@ -714,10 +717,7 @@
                                    
                                    @h1{How do I make the most use of DrDr?}
                                    @p{So DrDr can be effective with all testing packages and untested code, it only pays attention to error output and non-zero exit codes. You can make the most of this strategy by ensuring that when your tests are run successfully they have no STDERR output and exit cleanly, but have both when they fail.}
-                                   
-                                   @h1{How do I fix the reporting of an error in my code?}
-                                   @p{If you know you code does not have a bug, but DrDr thinks it does, you can probably fix it by setting its properties: allow it to run longer with @code{@,PROP:timeout} (but be kind and perhaps change the program to support work load selection on the command-line) or make sure it is run with the right command-line using @code{@,PROP:command-line}.}
-                                   
+                                                                      
                                    @h1{How can I do the most for DrDr?}
                                    @p{The most important thing you can do is eliminate false positives by configuring DrDr for your code and removing spurious error output.}
                                    @p{The next thing is to structure your code so DrDr does not do the same work many times. For example, because DrDr will load every file if your test suite is broken up into different parts that execute when loaded @em{and} they are all loaded by some other file, then DrDr will load and run them twice. The recommended solution is to have DrDr ignore the combining file or change it so a command-line argument is needed to run everything but is not provided by DrDr, that way the combining code is compiled but the tests are run once.}
@@ -804,7 +804,6 @@
            (link ([rel "stylesheet"] [type "text/css"] [href "/render.css"])))
      (body
       (div ([class "dirlog, content"])
-           ; XXX Use same function as above
            (span ([class "breadcrumb"])
                  (span ([class "this"]) 
                        "DrDr"))
@@ -862,7 +861,7 @@
                                        (regexp-match #rx"No cache available" (exn-message x)))
                                      (lambda (x)
                                        (no-rendering-row))])
-                                 ; XXX One function to generate
+                                 ;; XXX One function to generate
                                  (match (dir-rendering (revision-log-dir rev))
                                    [#f
                                     (no-rendering-row)]
@@ -885,7 +884,7 @@
                                                   `(td ([sorttable_customkey ,(number->string v)])
                                                        ,(number->string/zero v)))
                                                 (list timeout unclean stderr changes))
-                                         (td ,responsible-party))])))])
+                                         (td ,(format-responsible responsible-party)))])))])
                           (list-limit
                            how-many-revs offset
                            all-revs))))
@@ -1028,7 +1027,7 @@
   (with-handlers ([(lambda (x)
                      (regexp-match #rx"File is not cached" (exn-message x)))
                    (lambda (x)
-                     ; XXX Make a little nicer
+                     ;; XXX Make a little nicer
                      (parameterize ([current-rev r1])
                        (file-not-found f1)))])
     (define l1 (status-output-log (read-cache f1)))
@@ -1036,7 +1035,7 @@
     (with-handlers ([(lambda (x)
                        (regexp-match #rx"File is not cached" (exn-message x)))
                      (lambda (x)
-                       ; XXX Make a little nicer
+                       ;; XXX Make a little nicer
                        (parameterize ([current-rev r2])
                          (file-not-found f2)))])
       (define l2 (status-output-log (read-cache f2)))

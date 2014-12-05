@@ -1,4 +1,6 @@
-#lang racket
+#lang racket/base
+(require racket/contract/base)
+
 (define (notify! fmt . args)
   (log-info (format "[~a] ~a" (current-seconds) (apply format fmt args))))
 

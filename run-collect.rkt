@@ -1,5 +1,9 @@
-#lang racket
-(require "status.rkt"
+#lang racket/base
+(require racket/local
+         racket/match
+         racket/list
+         racket/contract/base
+         "status.rkt"
          "notify.rkt"
          "rewriting.rkt"
          "dirstruct.rkt"

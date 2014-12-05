@@ -1,4 +1,7 @@
-#lang racket
+#lang racket/base
+(require racket/contract/base
+         racket/match
+         racket/list)
 
 (define list/count
   (or/c exact-nonnegative-integer? (listof bytes?)))

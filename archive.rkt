@@ -1,5 +1,11 @@
-#lang racket
-(require "path-utils.rkt")
+#lang racket/base
+(require racket/port
+         racket/list
+         racket/file
+         racket/local
+         racket/match
+         racket/contract/base
+         "path-utils.rkt")
 
 (define (value->bytes v)
   (with-output-to-bytes (lambda () (write v))))

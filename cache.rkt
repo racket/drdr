@@ -1,5 +1,8 @@
-#lang racket
-(require "path-utils.rkt")
+#lang racket/base
+(require racket/port
+         racket/file
+         racket/contract/base
+         "path-utils.rkt")
 
 ; (symbols 'always 'cache 'no-cache)
 (define cache/file-mode (make-parameter 'cache))

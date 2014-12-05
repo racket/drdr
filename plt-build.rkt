@@ -1,5 +1,9 @@
-#lang racket
-(require racket/file
+#lang racket/base
+(require racket/list
+         racket/local
+         racket/match
+         racket/contract/base
+         racket/file
          racket/runtime-path
          "job-queue.rkt"
          "metadata.rkt"
@@ -177,12 +181,6 @@
     (path->string (build-path trunk-dir "racket" "bin" "racket")))
   (define raco-path
     (path->string (build-path trunk-dir "racket" "bin" "raco")))
-  ;; XXX Remove
-  (define mzc-path
-    (path->string (build-path trunk-dir "racket" "bin" "mzc")))
-  (define gracket-path
-    (path->string (build-path trunk-dir "racket" "bin" "gracket")))
-  (define gui-workers (make-job-queue 1))
   (define test-workers (make-job-queue (number-of-cpus)))
 
   (define pkgs-pths
@@ -210,7 +208,6 @@
          (define directory? (directory-exists? pth))
          (cond
            [directory?
-            ;; XXX do this in parallel?
             (test-directory pth dir-sema)]
            [else
             (define log-pth (trunk->log pth))
@@ -219,48 +216,16 @@
                (semaphore-post dir-sema)]
               [else
                (define pth-timeout
-                 ;; xxx assume that paths will enforce their own
-                 ;; timeouts with raco test, but protect ourselves a
-                 ;; little
                  (current-make-install-timeout-seconds))
                (define pth-cmd/general
                  (path-command-line pth pth-timeout))
                (define-values
                  (pth-cmd the-queue)
                  (match pth-cmd/general
-                   [#f
-                    (values #f #f)]
-                   [(list-rest (or 'mzscheme 'racket) rst)
-                    (values
-                     (lambda (k)
-                       (k (list* racket-path rst)))
-                     test-workers)]
-                   [(list-rest 'mzc rst)
-                    (values
-                     (lambda (k) (k (list* mzc-path rst)))
-                     test-workers)]
                    [(list-rest 'raco rst)
                     (values
                      (lambda (k) (k (list* raco-path rst)))
-                     test-workers)]
-                   [(list-rest (or 'mred 'mred-text
-                                   'gracket 'gracket-text)
-                               rst)
-                    (values
-                     (if (on-unix?)
-                       (lambda (k)
-                         (k
-                          (list* gracket-path
-                                 "-display"
-                                 (format
-                                  ":~a"
-                                  (cpu->child
-                                   (current-worker)))
-                                 rst)))
-                       #f)
-                     gui-workers)]
-                   [_
-                    (values #f #f)]))
+                     test-workers)]))
                (cond
                  [pth-cmd
                   (submit-job!
@@ -301,7 +266,6 @@
   (for ([pp (in-list (tested-packages))])
     (define (run name source)
       (run/collect/wait/log
-       ;; XXX Give it its own timeout
        #:timeout (current-make-install-timeout-seconds)
        #:env (current-env)
        (build-path log-dir "pkg" name)
@@ -344,8 +308,7 @@
       (λ _
         (kill-thread (current-thread))))))
   (notify! "Stopping testing")
-  (stop-job-queue! test-workers)
-  (stop-job-queue! gui-workers))
+  (stop-job-queue! test-workers))
 
 (define (recur-many i r f)
   (if (zero? i)

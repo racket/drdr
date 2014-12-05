@@ -1,5 +1,8 @@
-#lang racket
-(require "path-utils.rkt"
+#lang racket/base
+(require racket/match
+         racket/list
+         racket/local
+         "path-utils.rkt"
          "run-collect.rkt"
          "replay.rkt"
          racket/runtime-path

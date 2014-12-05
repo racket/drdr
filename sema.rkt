@@ -1,4 +1,5 @@
-#lang racket
+#lang racket/base
+(require racket/contract/base)
 
 (define (semaphore-wait* sema how-many)
   (unless (zero? how-many)

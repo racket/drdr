@@ -1,5 +1,7 @@
-#lang racket
-(require racket/system
+#lang racket/base
+(require racket/match
+         racket/cmdline
+         racket/system
          "dirstruct.rkt"
          "status.rkt"
          (except-in "diff.rkt"

@@ -1,5 +1,7 @@
-#lang racket
-(require "status.rkt")
+#lang racket/base
+(require racket/match
+         racket/contract/base
+         "status.rkt")
 
 (define (rewrite-status #:rewrite rewrite-string s)
   (match s

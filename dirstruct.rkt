@@ -1,5 +1,7 @@
-#lang racket
-(require "path-utils.rkt")
+#lang racket/base
+(require racket/bool
+         racket/contract/base
+         "path-utils.rkt")
 
 (define number-of-cpus
   (make-parameter 1))

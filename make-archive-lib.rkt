@@ -1,5 +1,7 @@
-#lang racket
+#lang racket/base
 (require racket/system
+         racket/local
+         racket/file
          "config.rkt"
          "archive.rkt"
          "path-utils.rkt"

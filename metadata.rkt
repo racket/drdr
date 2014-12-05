@@ -1,71 +1,85 @@
-#lang racket
-(require "path-utils.rkt"
+#lang racket/base
+(require racket/path
+         racket/match
+         racket/list
+         racket/contract/base
+         racket/string
+         racket/set
+         "status.rkt"
+         "path-utils.rkt"
          "dirstruct.rkt"
          "scm.rkt")
-
-(define PROP:command-line "drdr:command-line")
+(module+ test
+  (require rackunit))
 
 (define (path-command-line a-path a-timeout)
-  (define suffix (filename-extension a-path))
-  (define default-cmd
-    `(raco "test" "-m" "--timeout" ,(number->string a-timeout) *))
-  (define (replace-* s)
-    (cond
-      [(eq? '* s)
-       (path->string* a-path)]
-      [(not (string? s))
-       (format "~a" s)]
-      [else
-       s]))
-  (match (get-prop a-path 'drdr:command-line default-cmd)
-    [#f #f]
-    [(? list? l)
-     (cons (first l)
-           (map replace-* (rest l)))]))
+  `(raco "test" "-m" "--timeout" ,(number->string a-timeout)
+    ,(path->string* a-path)))
 
-(define (path-responsible a-path)
-  (get-prop a-path 'responsible #:as-string? #t))
+(define (listify x)
+  (if (list? x) x (list x)))
 
-(define (path-random? a-path)
-  (get-prop a-path 'drdr:random))
+(define (calculate-responsible output-log)
+  (set->responsible
+   (for/fold ([r (responsible->set "")])
+             ([e (in-list output-log)])
+     (match e
+       [(stdout (regexp #rx#"^raco test: @\\(test-responsible '(.+)\\)$"
+                        (list _ who)))
+        (set-union
+         r
+         (list->set
+          (map (λ (x) (format "~a" x ))
+               (listify (read (open-input-bytes who))))))]
+       [_
+        r]))))
+(module+ test
+  (check-equal?
+   (calculate-responsible
+    (list (stdout #"blah blah blah")
+          (stdout #"blah blah blah")
+          (stdout #"raco test: @(test-responsible '(robby))")
+          (stdout #"blah blah blah")))
+   "robby")
+  (check-equal?
+   (calculate-responsible
+    (list (stdout #"blah blah blah")
+          (stdout #"blah blah blah")
+          (stdout #"raco test: @(test-responsible 'robby)")
+          (stdout #"blah blah blah")))
+   "robby")
+  (check-equal?
+   (calculate-responsible
+    (list (stdout #"blah blah blah")
+          (stdout #"blah blah blah")
+          (stdout #"raco test: @(test-responsible '(robby jay))")
+          (stdout #"blah blah blah")))
+   "robby,jay"))
+
+(define (calculate-random? output-log)
+  (ormap
+   (λ (l)
+     (and (stdout? l)
+          (regexp-match #rx"DrDr: This file has random output."
+                        (stdout-bytes l))))
+   output-log))
+
+(define (responsible-append x y)
+  (set->responsible
+   (set-union (responsible->set x)
+              (responsible->set y))))
+(define (set->responsible l)
+  (string-append* (add-between (set->list l) ",")))
+(define (responsible->set s)
+  (list->set (string-split s ",")))
 
 (provide/contract
- [PROP:command-line string?]
- [path-responsible 
-  (path-string? . -> . (or/c string? false/c))]
- [path-command-line 
-  (-> path-string? exact-nonnegative-integer? 
-      (or/c (cons/c symbol? (listof string?)) false/c))]
- [path-random? (path-string? . -> . boolean?)])
-
-;;; Property lookup
-(provide props-cache)
-(define props-cache (make-hasheq))
-(define (get-prop a-fs-path prop [def #f] #:as-string? [as-string? #f])
-  (define rev (current-rev))
-  (define a-path
-    (substring
-     (path->string
-      ((rebase-path (revision-trunk-dir rev) "/") a-fs-path))
-     1))
-  (define props:get-prop
-    (hash-ref! props-cache rev
-               (lambda ()
-                 (define tmp-file (make-temporary-file "props~a.rkt" #f (current-temporary-directory)))
-                 (and
-                  ;; Checkout the props file
-                  (scm-export-file
-                   rev
-                   (plt-repository)
-                   "pkgs/plt-services/meta/props"
-                   tmp-file)
-                  ;; Dynamic require it
-                  (begin0
-                    (with-handlers ([exn? (λ (x) #f)])
-                      (dynamic-require `(file ,(path->string tmp-file))
-                                       'get-prop))
-                    (delete-file tmp-file))))))
-  ;; XXX get-prop is stupid and errors when a-path is invalid rather than returning def
-  (with-handlers ([exn? (lambda (x) def)])
-    (props:get-prop a-path prop def
-                    #:as-string? as-string?)))
+ [responsible-append
+  (-> string? string? string?)]
+ [calculate-responsible
+  (-> (listof event?) string?)]
+ [calculate-random?
+  (-> (listof event?) boolean?)]
+ [path-command-line
+  (-> path-string? exact-nonnegative-integer?
+      (cons/c symbol? (listof string?)))])

@@ -1,5 +1,8 @@
-#lang racket
-(require "config.rkt"
+#lang racket/base
+(require racket/cmdline
+         racket/list
+         racket/match
+         "config.rkt"
          "dirstruct.rkt"
          "cache.rkt"
          "path-utils.rkt"

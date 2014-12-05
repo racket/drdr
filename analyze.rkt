@@ -1,5 +1,10 @@
-#lang racket
-(require racket/file
+#lang racket/base
+(require racket/match
+         racket/file
+         racket/list
+         racket/function
+         racket/contract/base
+         racket/bool
          "diff.rkt"
          "scm.rkt"
          "list-count.rkt"
@@ -12,7 +17,7 @@
          "rendering.rkt")
 (provide (all-from-out "rendering.rkt"))
 
-; Email
+;; Email
 (require net/sendmail
          "formats.rkt")
 
@@ -161,10 +166,7 @@
                [(id ps) (in-hash ht)])
        (and 
         (for/or ([p (in-list ps)])
-          ;; XXX This squelch should be disabled if the committer changed this file
-          ;; XXX But even then it can lead to problems
-          (not (path-random? (build-path (revision-trunk-dir cur-rev)
-                                         (substring (path->string* p) 1)))))
+          (not (rendering-random? (log-rendering p))))
         (not (symbol=? id 'changes))))))
   (define mail-recipients
     (remove-duplicates
@@ -201,9 +203,8 @@
                            (list (format "  ~a" id)
                                  (for/list ([f (in-list paths)]
                                             [i (in-range ERROR-LIMIT)]
-                                            #:when (not (path-random?
-                                                         (build-path (revision-trunk-dir cur-rev)
-                                                                     (substring (path->string* f) 1)))))
+                                            #:when (not (rendering-random?
+                                                         (log-rendering f))))
                                    (format "    ~a" (path->url f)))
                                  ""))))
                    "")
@@ -272,13 +273,7 @@
   (parameterize ([current-rev rev])
     (dir-rendering log-dir #:committer? #t)))
 
-(define (drdr-random-notification? l)
-  (and (stdout? l)
-       (regexp-match #rx"DrDr: This file has random output." 
-                     (stdout-bytes l))))
-
 (define (log-rendering log-pth)
-  ; XXX
   (if (or #t (file-exists? log-pth))
       (cache/file
        (analyze-path log-pth #f)
@@ -290,10 +285,10 @@
            [(and log (struct status (start end command-line output-log)))
             (define dur (status-duration log))
             (define any-stderr? (ormap stderr? output-log))
+            (define random? (calculate-random? output-log))
             (define changed?
               (if (and (previous-rev)
-                       (not (path-random? (trunk-path log-pth)))
-                       (not (ormap drdr-random-notification? output-log)))
+                       (not random?))
                   (with-handlers ([exn:fail? 
                                    ;; This #f means that new files are
                                    ;; NOT considered changed
@@ -306,28 +301,24 @@
                                     (status-output-log (read-cache prev-log-pth))))
                   #f))
             (define responsible 
-              (or (path-responsible (trunk-path log-pth))
-                  (and (regexp-match #rx"/planet/" (path->string* log-pth))
-                       "jay")
-                  ; XXX maybe mflatt, eli, or tewk
-                  (and (regexp-match #rx"/src/" (path->string* log-pth))
-                       "jay")
-                  "nobody"))
+              (or (calculate-responsible output-log)
+                  ""))
             (define lc
               (list (path->bytes log-pth)))
-            (make-rendering start end dur 
-                            (if (timeout? log) lc empty)
-                            (if (exit? log) 
-                                (if (zero? (exit-code log)) empty lc)
-                                empty)
-                            (if any-stderr? lc empty)
-                            responsible
-                            (if changed? lc empty))])))
+            (make-rendering.v2
+             start end dur 
+             (if (timeout? log) lc empty)
+             (if (exit? log) 
+                 (if (zero? (exit-code log)) empty lc)
+                 empty)
+             (if any-stderr? lc empty)
+             responsible
+             (if changed? lc empty)
+             random?)])))
       #f))
 
 (define (dir-rendering dir-pth 
                        #:committer? [committer? #f])
-  ; XXX
   (if (or #t (directory-exists? dir-pth))
       (cache/file
        (analyze-path dir-pth #t)
@@ -343,30 +334,43 @@
                   (match (next-rendering)
                     [#f
                      acc]
-                    [(and n (struct rendering (pth-start pth-end pth-dur pth-timeouts pth-unclean-exits pth-stderrs _pth-responsible pth-changed)))
+                    [(and n 
+                          (struct rendering 
+                              (pth-start pth-end pth-dur pth-timeouts
+                               pth-unclean-exits pth-stderrs pth-responsible
+                               pth-changed)))
                      (match acc
                        [#f n]
-                       [(struct rendering (acc-start acc-end acc-dur acc-timeouts acc-unclean-exits acc-stderrs acc-responsible acc-changed))
-                        (make-rendering (min pth-start acc-start)
-                                        (max pth-end acc-end)
-                                        (+ pth-dur acc-dur)
-                                        (lc+ pth-timeouts acc-timeouts)
-                                        (lc+ pth-unclean-exits acc-unclean-exits)
-                                        (lc+ pth-stderrs acc-stderrs)
-                                        acc-responsible
-                                        (lc+ pth-changed acc-changed))])]))
-                (make-rendering 
+                       [(struct rendering
+                          (acc-start acc-end acc-dur acc-timeouts
+                           acc-unclean-exits acc-stderrs acc-responsible
+                           acc-changed))
+                        (make-rendering.v2
+                         (min pth-start acc-start)
+                         (max pth-end acc-end)
+                         (+ pth-dur acc-dur)
+                         (lc+ pth-timeouts acc-timeouts)
+                         (lc+ pth-unclean-exits acc-unclean-exits)
+                         (lc+ pth-stderrs acc-stderrs)
+                         (responsible-append pth-responsible 
+                                             acc-responsible)
+                         (lc+ pth-changed acc-changed)
+                         (or (rendering-random? n)
+                             (rendering-random? acc)))])]))
+                (make-rendering.v2 
                  +inf.0 -inf.0 0
                  empty empty empty
                  
                  (or
                   (and committer? 
                        (with-handlers ([exn:fail? (lambda (x) #f)])
-                         (scm-commit-author (read-cache (revision-commit-msg (current-rev))))))
-                  (or (path-responsible (trunk-path dir-pth))
-                      "nobody"))
+                         (scm-commit-author
+                          (read-cache 
+                           (revision-commit-msg (current-rev))))))
+                  "")
                  
-                 empty)
+                 empty
+                 #f)
                 (directory-list* dir-pth))))
       #f))
 

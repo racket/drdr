@@ -1,5 +1,8 @@
-#lang racket
-(require racket/file)
+#lang racket/base
+(require racket/list
+         racket/path
+         racket/contract/base
+         racket/file)
 
 (define current-temporary-directory
   (make-parameter #f))

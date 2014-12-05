@@ -1,5 +1,7 @@
-#lang racket
-(require "scm.rkt"
+#lang racket/base
+(require racket/match
+         racket/contract/base
+         "scm.rkt"
          "retry.rkt")
 
 (define current-monitoring-interval-seconds
