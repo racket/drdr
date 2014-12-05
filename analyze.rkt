@@ -166,7 +166,10 @@
                [(id ps) (in-hash ht)])
        (and 
         (for/or ([p (in-list ps)])
-          (not (rendering-random? (log-rendering p))))
+          (not (rendering-random? 
+                (log-rendering 
+                 (build-path (revision-log-dir cur-rev)
+                             p)))))
         (not (symbol=? id 'changes))))))
   (define mail-recipients
     (remove-duplicates
@@ -203,8 +206,12 @@
                            (list (format "  ~a" id)
                                  (for/list ([f (in-list paths)]
                                             [i (in-range ERROR-LIMIT)]
-                                            #:when (not (rendering-random?
-                                                         (log-rendering f))))
+                                            #:when (not 
+                                                    (rendering-random?
+                                                     (log-rendering 
+                                                      (build-path
+                                                       (revision-log-dir cur-rev)
+                                                       f)))))
                                    (format "    ~a" (path->url f)))
                                  ""))))
                    "")
