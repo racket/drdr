@@ -247,7 +247,7 @@
                                   (with-temporary-directory
                                    (run/collect/wait/log
                                     log-pth
-                                    #:timeout pth-timeout
+                                    #:timeout (current-make-install-timeout-seconds)
                                     #:env (current-env)
                                     (first l)
                                     (rest l))))))))))
