@@ -60,11 +60,20 @@
   (ormap
    (λ (l)
      (and (stdout? l)
-          (or (regexp-match #rx"raco test: @(test-random #t)"
+          (or (regexp-match (regexp-quote "raco test: @(test-random #t)")
                             (stdout-bytes l))
-              (regexp-match #rx"DrDr: This file has random output."
-                            (stdout-bytes l)))))
+              (regexp-match (regexp-quote "DrDr: This file has random output.")
+                            (stdout-bytes l)))
+          #t))
    output-log))
+(module+ test
+  (check-equal?
+   (calculate-random?
+    (list (stdout #"blah blah blah")
+          (stdout #"raco test: @(test-random #t)")
+          (stdout #"raco test: @(test-responsible '(robby))")
+          (stdout #"blah blah blah")))
+   #t))
 
 (define (responsible-append x y)
   (set->responsible
