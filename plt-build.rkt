@@ -277,6 +277,12 @@
   (run/collect/wait/log
    #:timeout (current-subprocess-timeout-seconds)
    #:env (current-env)
+   (build-path log-dir "pkg-show")
+   raco-path
+   (list "pkg" "show" "-a"))
+  (run/collect/wait/log
+   #:timeout (current-subprocess-timeout-seconds)
+   #:env (current-env)
    (build-path log-dir "pkg-src" "build" "set-browser.rkt")
    racket-path
    (list "-t"

@@ -359,7 +359,9 @@
   (match (log-rendering log-pth)
     [#f
      (file-not-found log-pth)]
-    [(and the-log-rendering (struct rendering (_ _ dur _ _ _ responsible changed)))
+    [(and the-log-rendering 
+          (struct rendering 
+            (start end dur _ _ _ responsible changed)))
      (match (read-cache log-pth)
        [(and log (struct status (_ _ command-line output-log)))
         (define-values (title breadcrumb) (path->breadcrumb log-pth #f))
@@ -378,6 +380,15 @@
         (define prev-rev-url (format "/~a~a" (previous-rev) the-base-path))
         (define cur-rev-url (format "/~a~a" "current" the-base-path))
         (define s-output-log (log-divide output-log))
+        (define (timestamp msecs)
+          (define secs (/ msecs 1000))
+          (with-handlers ([exn:fail? (lambda (x) "")])
+            (format "~a.~a"
+                    (date->string (seconds->date secs) #t)
+                    (substring
+                     (number->string
+                      (/ (- msecs (* 1000 (floor secs))) 1000))
+                     2))))
         (response/xexpr
          `(html 
            (head (title ,title)
@@ -400,6 +411,12 @@
                                                `(span ([class "commandline"]) ,s))
                                              command-line)
                                         " ")))
+                             (tr ([class "date"]) 
+                                 (td "Start:")
+                                 (td ,(timestamp start)))
+                             (tr ([class "date"]) 
+                                 (td "End:")
+                                 (td ,(timestamp end)))
                              (tr (td "Duration:")
                                  (td ,(format-duration-ms dur)
                                      nbsp (a ([href ,(format "/data~a" (path-add-suffix the-base-path #".timing"))])
