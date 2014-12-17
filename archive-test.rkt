@@ -1,6 +1,7 @@
 #lang racket/base
 (require "path-utils.rkt"
          "archive.rkt"
+         racket/file
          tests/eli-tester)
 
 (define archive
@@ -12,7 +13,9 @@
  (for ([fp (in-list (directory-list* (current-directory)))]
        #:when (file-exists? fp))
    (test
-    (archive-extract-file archive (build-path (current-directory) fp)) => (file->bytes fp)))
+    (archive-extract-file archive (build-path (current-directory) fp))
+    => (file->bytes fp)))
+ 
  (archive-extract-file archive "test") =error> #rx"not in the archive"
  (archive-extract-file archive (build-path (current-directory) "test")) =error> #rx"not in the archive"
  (archive-extract-file archive (build-path (current-directory) "static")) =error> #rx"not a file"
