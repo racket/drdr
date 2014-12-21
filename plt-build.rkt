@@ -160,13 +160,10 @@
             (subprocess-kill the-process #t))))
     (thunk)))
 
+(define-runtime-path pkgs-file "pkgs.rktd")
+
 (define (tested-packages)
-  (define tmp-file (make-temporary-file "pkgs~a.rktd" #f (current-temporary-directory)))
-  ;; Checkout the pkgs list
-  (scm-export-file (current-rev) (plt-repository) "pkgs/plt-services/meta/drdr/pkgs.rktd" tmp-file)
-  ;; Read it in
-  (define val (file->value tmp-file))
-  (delete-file tmp-file)
+  (define val (file->value pkgs-file))
   val)
 
 (define (test-revision rev)
