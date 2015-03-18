@@ -11,6 +11,7 @@
   (define (monitor-w/o-wait prev-rev)
     (define new-revs
       (scm-revisions-after prev-rev repos))
+    (system* (path->string (build-path (drdr-directory) "beat-poll.sh")))
     (match new-revs
       [(list)
        ; There has not yet been more revisions

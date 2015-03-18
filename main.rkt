@@ -77,5 +77,7 @@
              (lambda (prev-rev cur-rev)
                (handle-revision prev-rev cur-rev)
 
+               (system* (path->string (build-path (drdr-directory) "beat-run.sh")))
+               
                ;; We have problems running for a long time so just restart after each rev
                (exit 0)))
