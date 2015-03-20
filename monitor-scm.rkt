@@ -1,6 +1,8 @@
 #lang racket/base
 (require racket/match
+         racket/system
          racket/contract/base
+         "dirstruct.rkt"
          "scm.rkt"
          "retry.rkt")
 
