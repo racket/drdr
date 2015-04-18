@@ -16,13 +16,13 @@
     (system* (path->string (build-path (drdr-directory) "beat-poll.sh")))
     (match new-revs
       [(list)
-       ; There has not yet been more revisions
+       ;; There has not yet been more revisions
        (monitor prev-rev)]
       [(cons new-rev newer)
        (scm-update repos)
-       ; Notify of newer ones
+       ;; Notify of newer ones
        (notify-newer! newer)
-       ; There was a commit that we care about. Notify, then recur
+       ;; There was a commit that we care about. Notify, then recur
        (retry-until-success
         (format "Notifying of revision ~a" new-rev)
         (notify-user! prev-rev new-rev))       

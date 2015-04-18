@@ -20,44 +20,16 @@
 (provide/contract
  [newest-push (-> number?)]) 
 (define (newest-push)
-  (string->number
-   (port->string
-    (get-pure-port
-     (string->url
-      (format "~a/push-counter" git-url-base))))))
+  ;; xxx may be empty
+  (push-data-num (first (pushes-intermediates (current-pushes)))))
 
-(define (pad2zeros n)
-  (format "~a~a"
-          (if (n . < . 10)
-              "0" "")
-          (number->string n)))
-
-(define-struct push-data (who end-commit branches) #:prefab)
+(define-struct push-data (num who end-commit branches) #:prefab)
 
 (define (push-info push-n)
-  (define push-n100s (quotient push-n 100))
-  (define push-nrem (pad2zeros (modulo push-n 100)))
-  (define ls 
-    (port->lines 
-     (get-pure-port 
-      (string->url 
-       (format "~a/pushes/~a/~a" git-url-base push-n100s push-nrem)))))
-  (match 
-   ls
-   [(list (regexp #rx"^([^ ]+) +([0-9abcdef]+)$" (list _ who end-commit))
-          (regexp #rx"^([0-9abcdef]+) +([0-9abcdef]+) +(.+)$" (list _ bstart bend branch)))
-    (make-push-data who bend
-                    (make-immutable-hash
-                     (list (cons branch (vector bstart bend)))))]
-   [(list (regexp #rx"^([^ ]+) +([0-9abcdef]+)$" (list _ who end-commit))
-          (regexp #rx"^([0-9abcdef]+) +([0-9abcdef]+) +(.+)$" (list _ bstart bend branch))
-          ...)
-    (make-push-data who end-commit 
-                    (make-immutable-hash
-                     (map (lambda (b bs be) (cons b (vector bs be)))
-                          branch bstart bend)))]
-   [_
-    #f]))
+  (or (for/or ([pd (in-list (pushes-intermediates (current-pushes)))])
+        (and (= push-n (push-data-num pd))
+             pd))
+      (error 'push-info "~a does not exist" push-n)))
 
 (define (pipe/proc cmds)
   (if (null? (cdr cmds))
@@ -279,21 +251,72 @@
 (define master-branch "refs/heads/master")
 (define release-branch "refs/heads/release")
 
-(define (contains-drdr-request? p)
-  (for*/or ([c (in-list (git-push-commits p))]
-            [m (in-list (git-commit-msg* c))])
-           (regexp-match #rx"DrDr, test this push" m)))
+;; branch->head : hash branch:str checksum:str
+;; intermediates : listof push-data
+(struct pushes (branch->head intermediates) #:prefab)
+(define (current-pushes)
+  (define p (plt-new-pushes-file))
+  (if (file-exists? p)
+      (file->value p)
+      (pushes (hash) empty)))
+(define (current-pushes! v)
+  (define p (plt-new-pushes-file))
+  (write-to-file v p #:exists 'replace))
+
+(define (scm-branch-heads)
+  (define (read-heads p)
+    (for/fold ([h (hash)]) ([l (in-lines p)])
+      (match-define (list head branch) (string-split l))
+      (hash-set h branch head)))
+  (parameterize ([current-directory (plt-repository)])
+    (system/output-port 
+     #:k (λ (port) (read-heads port))
+     (git-path) "show-ref" "--heads")))
+
+(define (branches-identical? old-ht new-ht)
+  (for/and ([(b n) (in-hash new-ht)])
+    (string=? n (hash-ref old-ht b #f))))
+
+(define (contains-branch-end? pds branch bend)
+  (for/or ([pd (in-list pds)])
+    (equal? bend (hash-ref (push-data-branches pd) branch #f))))
+
+(define (extract-git-commit-author bend)
+  (parameterize ([current-directory (plt-repository)])
+    (system/output-port 
+     #:k (λ (port) (first (string-split (read-line port) "@")))
+     (git-path) "--no-page" "show" "-s" "--format='%ae'")))
 
 (define (scm-revisions-after cur-rev repo)
-  (define newest-rev (newest-push))
-  (for/list ([rev (in-range (add1 cur-rev) (add1 newest-rev))]
-             #:when
-             (let ([info (push-info rev)])
-               (and info 
-                    (or (hash-has-key? (push-data-branches info) master-branch)
-                        (hash-has-key? (push-data-branches info) release-branch)
-                        (contains-drdr-request? (get-scm-commit-msg rev repo))))))
-    rev))
+  (match-define (pushes branch->last-head intermediates)
+    (current-pushes))
+  (scm-update repo)
+  (define branch->cur-head (scm-branch-heads))
+
+  (define new-intermediates
+    (cond
+      [(and (branches-identical? branch->last-head branch->cur-head)
+            (= 1 (length intermediates))
+            (hash-ref (push-data-branches (first intermediates))
+                      master-branch #f)
+            (= cur-rev (push-data-num (first intermediates))))
+       (list (struct-copy push-data (first intermediates)
+                          [num (add1 cur-rev)]))]
+      [else
+       (for/fold ([ni intermediates]) ([(branch bend) (in-hash branch->cur-head)])
+         (cond
+           [(contains-branch-end? ni branch bend)
+            ni]
+           [else
+            (define bstart (branch-last ni branch))
+            (snoc ni
+                  (make-push-data
+                   (extract-git-commit-author bend) bend
+                   (make-immutable-hash
+                    (list (cons branch (vector bstart bend))))))]))]))
+  
+  (current-pushes! (pushes branch->cur-head new-intermediates))
+  new-intermediates)
 
 (provide/contract
  [scm-update

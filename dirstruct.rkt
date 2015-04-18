@@ -18,6 +18,9 @@
 (define (plt-future-build-directory)
   (build-path (plt-directory) "future-builds"))
 
+(define (plt-new-pushes-file)
+  (build-path (plt-directory) "pushes"))
+
 (define (plt-data-directory)
   (build-path (plt-directory) "data"))
 
