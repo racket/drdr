@@ -276,7 +276,7 @@
    #:env (current-env)
    (build-path log-dir "pkg-show")
    raco-path
-   (list "pkg" "show" "-a"))
+   (list "pkg" "show" "-al" "--full-checksum"))
   (run/collect/wait/log
    #:timeout (current-subprocess-timeout-seconds)
    #:env (current-env)
