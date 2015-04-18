@@ -424,7 +424,7 @@
                              (tr (td "Timeout:") (td ,(if (timeout? log) checkmark-entity "")))
                              (tr (td "Exit Code:") (td ,(if (exit? log) (number->string (exit-code log)) "")))
                              (tr (td "Random?") (td ,(if (rendering-random? the-log-rendering) "Yes" "No")))
-                             (tr (td " ") (td (a ([href ,scm-url]) "View File"))))
+                             #;(tr (td " ") (td (a ([href ,scm-url]) "View File"))))
                       ,(if (lc-zero? changed)
                            ""
                            `(div ([class "error"])
