@@ -9,8 +9,7 @@
          "dirstruct.rkt"
          net/url
          racket/system)
-(provide
- (all-from-out "svn.rkt"))
+(provide (all-from-out "svn.rkt"))
 
 (define git-path (make-parameter "/opt/local/bin/git"))
 (provide/contract
@@ -21,7 +20,11 @@
 (provide/contract
  [newest-push (-> number?)]) 
 (define (newest-push)
-  (string->number (port->string (get-pure-port (string->url (format "~a/push-counter" git-url-base))))))
+  (string->number
+   (port->string
+    (get-pure-port
+     (string->url
+      (format "~a/push-counter" git-url-base))))))
 
 (define (pad2zeros n)
   (format "~a~a"
@@ -293,7 +296,15 @@
     rev))
 
 (provide/contract
- [scm-update (path? . -> . void?)]
- [scm-revisions-after (exact-nonnegative-integer? path-string? . -> . (listof exact-nonnegative-integer?))]
- [scm-export-file (exact-nonnegative-integer? path-string? string? path-string? . -> . void?)]
- [scm-export-repo (exact-nonnegative-integer? path-string? path-string? . -> . void?)])
+ [scm-update
+  (-> path?
+      void?)]
+ [scm-revisions-after
+  (-> exact-nonnegative-integer? path-string?
+      (listof exact-nonnegative-integer?))]
+ [scm-export-file
+  (-> exact-nonnegative-integer? path-string? string? path-string?
+      void?)]
+ [scm-export-repo
+  (-> exact-nonnegative-integer? path-string? path-string?
+      void?)])
