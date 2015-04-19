@@ -135,4 +135,5 @@
  [revision-trunk.tgz (exact-nonnegative-integer? . -> . path?)]
  [revision-trunk.tar.7z (exact-nonnegative-integer? . -> . path?)]
  [revision-archive (exact-nonnegative-integer? . -> . path?)]
- [path->revision (path-string? . -> . exact-nonnegative-integer?)])
+ [path->revision (path-string? . -> . exact-nonnegative-integer?)]
+ [plt-new-pushes-file (-> path-string?)])

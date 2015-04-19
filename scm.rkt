@@ -1,6 +1,8 @@
 #lang racket/base
 (require racket/contract/base
          racket/port
+         racket/file
+         racket/string
          racket/match
          racket/list
          racket/function
@@ -111,7 +113,7 @@
      empty]))
 
 (define (get-scm-commit-msg rev repo)
-  (match-define (struct push-data (who _ branches)) (push-info rev))
+  (match-define (struct push-data (_ who _ branches)) (push-info rev))
   (make-git-push
    rev who
    (apply append
@@ -286,6 +288,12 @@
     (system/output-port 
      #:k (λ (port) (first (string-split (read-line port) "@")))
      (git-path) "--no-page" "show" "-s" "--format='%ae'")))
+
+(define (branch-last ni branch)
+  (last (filter-map (λ (pd) (hash-ref (push-data-branches pd) branch #f)) ni)))
+
+(define (snoc l x)
+  (append l (list x)))
 
 (define (scm-revisions-after cur-rev repo)
   (match-define (pushes branch->last-head intermediates)

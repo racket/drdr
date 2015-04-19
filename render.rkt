@@ -423,8 +423,7 @@
                                              "(timing data)")))
                              (tr (td "Timeout:") (td ,(if (timeout? log) checkmark-entity "")))
                              (tr (td "Exit Code:") (td ,(if (exit? log) (number->string (exit-code log)) "")))
-                             (tr (td "Random?") (td ,(if (rendering-random? the-log-rendering) "Yes" "No")))
-                             #;(tr (td " ") (td (a ([href ,scm-url]) "View File"))))
+                             (tr (td "Random?") (td ,(if (rendering-random? the-log-rendering) "Yes" "No"))))
                       ,(if (lc-zero? changed)
                            ""
                            `(div ([class "error"])
@@ -671,7 +670,19 @@
                                    @h1{How is the build run?}
                                    @p{Every push is built from a clean checkout with the standard separate build directory command sequence, except that @code{make}
                                                                                                                                                          is passed @code{-j} with the number of cores. Each push also has a fresh home directory and PLaneT cache.}
-                                   
+
+                                   @h1{What is a push?}  @p{When we
+used SVN (Push 23032, although there was a hard drive crash and we
+lost a number of pushes from before then), before we switched to Git,
+a push was an SVN revision. After we started with Git (Push 18817, I
+think), we made a post-push script to keep track of when a push of a
+set commits happened (because that is not stored in any way in the Git
+repository.) Once we switched to a more distributed architecture with
+one repository per set of packages (Around push 29612), this became
+not very useful. After a while living with that (Push 29810), we
+decided to just run DrDr constantly, getting new commits as they come
+in.}
+
                                    @h1{How long does it take for a build to start after a check-in?}
                                    @p{Only one build runs at a time and when none is running the git repository is polled every @,(number->string (current-monitoring-interval-seconds)) seconds.}
                                    
