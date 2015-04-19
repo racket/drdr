@@ -20,7 +20,7 @@
 (define git-url-base "http://git.racket-lang.org/plt.git")
 
 (provide/contract
- [newest-push (-> number?)]) 
+ [newest-push (-> number?)])
 (define (newest-push)
   ;; xxx may be empty
   (push-data-num (first (pushes-intermediates (current-pushes)))))
@@ -35,12 +35,12 @@
 
 (define (pipe/proc cmds)
   (if (null? (cdr cmds))
-    ((car cmds))
-    (let-values ([(i o) (make-pipe 4096)])
-      (parameterize ([current-output-port o])
-        (thread (lambda () ((car cmds)) (close-output-port o))))
-      (parameterize ([current-input-port i])
-        (pipe/proc (cdr cmds))))))
+      ((car cmds))
+      (let-values ([(i o) (make-pipe 4096)])
+        (parameterize ([current-output-port o])
+          (thread (lambda () ((car cmds)) (close-output-port o))))
+        (parameterize ([current-input-port i])
+          (pipe/proc (cdr cmds))))))
 (define-syntax-rule (pipe expr exprs ...)
   (pipe/proc (list (lambda () expr) (lambda () exprs) ...)))
 
@@ -53,11 +53,11 @@
   (define-values (sp stdout stdin stderr)
     (apply subprocess init-stdout #f #f as))
   (begin0 (k stdout)
-          (subprocess-wait sp)
-          (subprocess-kill sp #t)
-          (close-input-port* stdout)
-          (close-output-port* stdin)
-          (close-input-port* stderr)))
+    (subprocess-wait sp)
+    (subprocess-kill sp #t)
+    (close-input-port* stdout)
+    (close-output-port* stdin)
+    (close-input-port* stderr)))
 
 (define-struct git-push (num author commits) #:prefab)
 (define-struct git-commit (hash author date msg) #:prefab)
@@ -106,7 +106,7 @@
     [(port-empty? in-p)
      empty]
     [(read-commit branch in-p)
-     => (lambda (c) 
+     => (lambda (c)
           (printf "~S\n" c)
           (list* c (read-commits branch in-p)))]
     [else
@@ -118,59 +118,59 @@
    rev who
    (apply append
           (for/list
-           ([(branch cs) branches])
-           (match-define (vector start-commit end-commit) cs)
-           (parameterize 
-            ([current-directory repo])
-            (system/output-port 
-             #:k (curry read-commits branch)
-             (git-path)
-             "--no-pager" "log" "--date=iso" "--name-only" "--no-merges"
-             (format "~a..~a" start-commit end-commit)))))))
+              ([(branch cs) branches])
+            (match-define (vector start-commit end-commit) cs)
+            (parameterize
+                ([current-directory repo])
+              (system/output-port
+               #:k (curry read-commits branch)
+               (git-path)
+               "--no-pager" "log" "--date=iso" "--name-only" "--no-merges"
+               (format "~a..~a" start-commit end-commit)))))))
 (provide/contract
-  [struct git-push 
-         ([num exact-nonnegative-integer?]
-          [author string?]
-          [commits (listof (or/c git-commit? git-commit*?))])]
- [struct git-commit 
-         ([hash string?]
-          [author string?]
-          [date string?]
-          [msg (listof string?)])]
- [struct git-diff 
-         ([hash string?]
-          [author string?]
-          [date string?]
-          [msg (listof string?)]
-          [mfiles (listof string?)])]
- [struct git-merge 
-         ([hash string?]
-          [author string?]
-          [date string?]
-          [msg (listof string?)]
-          [from string?]
-          [to string?])]
- [struct git-commit* 
-         ([branch string?]
-          [hash string?]
-          [author string?]
-          [date string?]
-          [msg (listof string?)])]
- [struct git-diff* 
-         ([branch string?]
-          [hash string?]
-          [author string?]
-          [date string?]
-          [msg (listof string?)]
-          [mfiles (listof string?)])]
- [struct git-merge* 
-         ([branch string?]
-          [hash string?]
-          [author string?]
-          [date string?]
-          [msg (listof string?)]
-          [from string?]
-          [to string?])]
+ [struct git-push
+   ([num exact-nonnegative-integer?]
+    [author string?]
+    [commits (listof (or/c git-commit? git-commit*?))])]
+ [struct git-commit
+   ([hash string?]
+    [author string?]
+    [date string?]
+    [msg (listof string?)])]
+ [struct git-diff
+   ([hash string?]
+    [author string?]
+    [date string?]
+    [msg (listof string?)]
+    [mfiles (listof string?)])]
+ [struct git-merge
+   ([hash string?]
+    [author string?]
+    [date string?]
+    [msg (listof string?)]
+    [from string?]
+    [to string?])]
+ [struct git-commit*
+   ([branch string?]
+    [hash string?]
+    [author string?]
+    [date string?]
+    [msg (listof string?)])]
+ [struct git-diff*
+   ([branch string?]
+    [hash string?]
+    [author string?]
+    [date string?]
+    [msg (listof string?)]
+    [mfiles (listof string?)])]
+ [struct git-merge*
+   ([branch string?]
+    [hash string?]
+    [author string?]
+    [date string?]
+    [msg (listof string?)]
+    [from string?]
+    [to string?])]
  [get-scm-commit-msg (exact-nonnegative-integer? path-string? . -> . git-push?)])
 
 (define (git-commit-msg* gc)
@@ -189,10 +189,10 @@
 (define (git-push-previous-commit gp)
   (define start (git-push-start-commit gp))
   (parameterize ([current-directory (plt-repository)])
-    (system/output-port 
+    (system/output-port
      #:k (λ (port) (read-line port))
      (git-path)
-     "--no-pager" "log" "--format=format:%P" start "-1")))  
+     "--no-pager" "log" "--format=format:%P" start "-1")))
 (define (git-push-start-commit gp)
   (define cs (git-push-commits gp))
   (if (empty? cs)
@@ -219,14 +219,14 @@
   (define commit
     (push-data-end-commit (push-info rev)))
   (call-with-output-file*
-   dest
-   #:exists 'truncate/replace
-   (lambda (file-port)
-     (parameterize ([current-directory repo])
-       (system/output-port
-        #:k void
-        #:stdout file-port
-        (git-path) "--no-pager" "show" (format "~a:~a" commit file)))))
+    dest
+    #:exists 'truncate/replace
+    (lambda (file-port)
+      (parameterize ([current-directory repo])
+        (system/output-port
+         #:k void
+         #:stdout file-port
+         (git-path) "--no-pager" "show" (format "~a:~a" commit file)))))
   (void))
 
 (define (scm-export-repo rev repo dest)
@@ -247,7 +247,8 @@
 
 (define (scm-update repo)
   (parameterize ([current-directory repo])
-    (system* (git-path) "fetch"))
+    (system* (git-path) "fetch")
+    (system* (git-path) "pull"))
   (void))
 
 (define master-branch "refs/heads/master")
@@ -271,26 +272,41 @@
       (match-define (list head branch) (string-split l))
       (hash-set h branch head)))
   (parameterize ([current-directory (plt-repository)])
-    (system/output-port 
+    (system/output-port
      #:k (λ (port) (read-heads port))
      (git-path) "show-ref" "--heads")))
 
 (define (branches-identical? old-ht new-ht)
   (for/and ([(b n) (in-hash new-ht)])
-    (string=? n (hash-ref old-ht b #f))))
+    (equal? n (hash-ref old-ht b #f))))
+
+(define BLANK-BRANCH-INFO (vector #f #f))
+(define (push-data-branch-info->bend v)
+  (vector-ref v 1))
 
 (define (contains-branch-end? pds branch bend)
   (for/or ([pd (in-list pds)])
-    (equal? bend (hash-ref (push-data-branches pd) branch #f))))
+    (equal? bend
+            (push-data-branch-info->bend
+             (hash-ref (push-data-branches pd) branch BLANK-BRANCH-INFO)))))
 
 (define (extract-git-commit-author bend)
   (parameterize ([current-directory (plt-repository)])
-    (system/output-port 
-     #:k (λ (port) (first (string-split (read-line port) "@")))
-     (git-path) "--no-page" "show" "-s" "--format='%ae'")))
+    (system/output-port
+     #:k (λ (port)
+           (define l (read-line port))
+           (if (eof-object? l)
+               (error 'extract-git-commit-author "Can't find author of ~v" bend)
+               (first (string-split l "@"))))
+     (git-path) "--no-pager" "show" "-s" "--format=%ae" bend)))
 
 (define (branch-last ni branch)
-  (last (filter-map (λ (pd) (hash-ref (push-data-branches pd) branch #f)) ni)))
+  (define l
+    (map push-data-branch-info->bend
+         (filter-map (λ (pd) (hash-ref (push-data-branches pd) branch #f)) ni)))
+  (if (empty? l)
+      #f
+      (last l)))
 
 (define (snoc l x)
   (append l (list x)))
@@ -300,6 +316,12 @@
     (current-pushes))
   (scm-update repo)
   (define branch->cur-head (scm-branch-heads))
+
+  (eprintf "sra: ~v\n"
+           (vector 'cur-rev cur-rev 'repo repo
+                   'branch->last-head branch->last-head
+                   'intermediates intermediates
+                   'branch->cur-head branch->cur-head))
 
   (define new-intermediates
     (cond
@@ -316,15 +338,16 @@
            [(contains-branch-end? ni branch bend)
             ni]
            [else
-            (define bstart (branch-last ni branch))
+            (define bstart (or (branch-last ni branch) bend))
             (snoc ni
                   (make-push-data
+                   (add1 cur-rev)
                    (extract-git-commit-author bend) bend
                    (make-immutable-hash
                     (list (cons branch (vector bstart bend))))))]))]))
-  
+
   (current-pushes! (pushes branch->cur-head new-intermediates))
-  new-intermediates)
+  (map push-data-num new-intermediates))
 
 (provide/contract
  [scm-update
