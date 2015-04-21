@@ -114,6 +114,7 @@
 
 (define (get-scm-commit-msg rev repo)
   (match-define (struct push-data (_ who _ branches)) (push-info rev))
+  (printf "get-scm-commit-msg ~v ~v ~v\n" rev who branches)
   (make-git-push
    rev who
    (apply append
@@ -347,7 +348,7 @@
                     (list (cons branch (vector bstart bend))))))]))]))
 
   (current-pushes! (pushes branch->cur-head new-intermediates))
-  (map push-data-num new-intermediates))
+  (remove cur-rev (map push-data-num new-intermediates)))
 
 (provide/contract
  [scm-update
