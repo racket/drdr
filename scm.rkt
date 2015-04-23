@@ -324,7 +324,7 @@
                    'intermediates intermediates
                    'branch->cur-head branch->cur-head))
 
-  (define new-intermediates
+  (define almost-new-intermediates
     (cond
       [(and (branches-identical? branch->last-head branch->cur-head)
             (= 1 (length intermediates))
@@ -347,8 +347,13 @@
                    (make-immutable-hash
                     (list (cons branch (vector bstart bend))))))]))]))
 
+  (define new-intermediates
+    (filter (λ (pd)
+              (< cur-rev (push-data-num pd)))
+            almost-new-intermediates))
+
   (current-pushes! (pushes branch->cur-head new-intermediates))
-  (remove cur-rev (map push-data-num new-intermediates)))
+  (map push-data-num new-intermediates))
 
 (provide/contract
  [scm-update
