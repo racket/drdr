@@ -185,7 +185,13 @@
        "drdr@racket-lang.org"
        (format "[DrDr] R~a ~a"
                cur-rev totals)
-       (list (format "~a@racket-lang.org" r))
+       (cond
+         [(equal? "" r)
+          (list "nobody@racket-lang.org")]
+         [(regexp-match (regexp-quote "@") r)
+          (list r)]
+         [else
+          (list (format "~a@racket-lang.org" r))])
        empty empty
        (flatten
         (list (format "DrDr has finished building push #~a after ~a."
