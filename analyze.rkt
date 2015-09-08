@@ -182,7 +182,7 @@
   (unless (andmap zero? nums)
     (for ([r (in-list mail-recipients)])
       (send-mail-message 
-       "drdr@racket-lang.org"
+       "drdr-notify@racket-lang.org"
        (format "[DrDr] R~a ~a"
                cur-rev totals)
        (cond
@@ -235,7 +235,7 @@
                   empty))))))
   
   ; Send message to IRC
-  (send-mail-message "drdr@racket-lang.org"
+  (send-mail-message "drdr-notify@racket-lang.org"
                      (format "http://drdr.racket-lang.org/~a/" 
                              cur-rev)
                      (list "eli+ircbot@eli.barzilay.org")
