@@ -130,8 +130,8 @@
   (define start-commit (git-push-start-commit log))
   (define end-commit (git-push-end-commit log))
   (if (string=? start-commit end-commit)
-      (format "http://github.com/plt/racket/commit/~a" end-commit)
-      (format "http://github.com/plt/racket/compare/~a...~a"
+      (format "http://github.com/racket/racket/commit/~a" end-commit)
+      (format "http://github.com/racket/racket/compare/~a...~a"
               (git-push-previous-commit log) end-commit)))
 
 (define (format-commit-msg)
@@ -198,7 +198,7 @@
                 (td 
                  (a 
                   ([href
-                    ,(format "http://github.com/plt/racket/commit/~a"
+                    ,(format "http://github.com/racket/racket/commit/~a"
                              hash)])
                   ,hash)))
                (tr ([class "date"])
@@ -374,7 +374,7 @@
                       (current-rev))
               (local [(define msg (read-cache* (revision-commit-msg (current-rev))))]
                 (if msg
-                    (format "http://github.com/plt/racket/blob/~a~a"
+                    (format "http://github.com/racket/racket/blob/~a~a"
                             (git-push-end-commit msg) the-base-path)
                     "#"))))
         (define prev-rev-url (format "/~a~a" (previous-rev) the-base-path))

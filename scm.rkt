@@ -17,7 +17,7 @@
 (provide/contract
  [git-path (parameter/c string?)])
 
-(define git-url-base "https://github.com/plt/racket.git")
+(define git-url-base "https://github.com/racket/racket.git")
 
 (provide/contract
  [newest-push (-> number?)])
