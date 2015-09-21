@@ -55,5 +55,5 @@
       #:exists 'replace
       (lambda ()
         (init-revisions!)
-        (for ([rev (in-list revisions)])
+        (for ([rev (in-list (unbox revisions-b))])
           (output-for-rev rev)))))

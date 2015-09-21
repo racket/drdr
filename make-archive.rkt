@@ -21,7 +21,7 @@
                      (case (mode)
                        [(many)
                         (local [(define all-revisions
-                                  (sort revisions >=))]
+                                  (sort (unbox revisions-b) >=))]
                                (for/or ([rev (in-list (list-tail all-revisions n))])
                                  (make-archive rev)))]
                        [(single)

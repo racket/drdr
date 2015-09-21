@@ -23,6 +23,10 @@
          (rename-file-or-directory tmp-path archive-path)
          (safely-delete-directory (revision-log-dir rev))
          (safely-delete-directory (revision-analyze-dir rev))
+         (for ([x (in-list '("analyzed" "archiving-done" "checkout-done"
+                             "commit-msg" "integrated" "timing-done"
+                             "recompressing"))])
+           (safely-delete-directory (build-path (revision-dir rev) x)))
          #f]))
 
 (provide make-archive)

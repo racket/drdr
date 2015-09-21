@@ -25,25 +25,26 @@
       (and (number? v)
            v))))
 
-(define revisions #f)
+(define revisions-b (box #f))
 
 (define (init-revisions!)
-  (set! revisions
-        (sort 
-         (filter-map
-          (compose string->number* path->string)
-          (directory-list (plt-build-directory)))
-         <)))
+  (define builds (directory-list (plt-build-directory)))
+  (define nums
+    (filter-map
+     (compose string->number* path->string)
+     builds))
+  (define sorted (sort nums <))
+  (set-box! revisions-b sorted))
 
 (define (newest-revision)
-  (last revisions))
+  (last (unbox revisions-b)))
 
 (define (second-to-last l)
   (list-ref l (- (length l) 2)))
 
 (define (second-newest-revision)
   (with-handlers ([exn:fail? (lambda (x) #f)])
-    (second-to-last revisions)))
+    (second-to-last (unbox revisions-b))))
 
 (define (newest-completed-revision)
   (define n (newest-revision))
@@ -52,7 +53,7 @@
       (second-newest-revision)))
 
 (provide/contract
- [revisions (or/c false/c (listof exact-nonnegative-integer?))]
+ [revisions-b (box/c (or/c false/c (listof exact-nonnegative-integer?)))]
  [init-revisions! (-> void)]
  [newest-revision (-> exact-nonnegative-integer?)]
  [second-newest-revision (-> (or/c false/c exact-nonnegative-integer?))]
