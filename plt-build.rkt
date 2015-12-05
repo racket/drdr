@@ -102,7 +102,11 @@
      (current-temporary-directory)))
   (dynamic-wind
       (lambda ()
-        (with-handlers ([exn:fail? void])
+        (with-handlers ([exn:fail?
+                         (λ (x)
+                           (notify! "Failed while copying HOME: ~a"
+                                    (exn-message x)))])
+          (delete-directory/files new-dir)
           (copy-directory/files
            (hash-ref (current-env) "HOME")
            new-dir)))
