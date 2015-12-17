@@ -10,7 +10,7 @@ cd "$DRDR"
 
 kill_all() {
   cat "$LOGS/"*.pid > /tmp/leave-pids-$$
-  KILL=`pgrep '^(Xorg|Xnest|Xvfb|Xvnc|fluxbox|racket|gracket(-text)?)$' | grep -w -v -f /tmp/leave-pids-$$`
+  KILL=`pgrep '^(Xorg|Xnest|Xvfb|Xvnc|fluxbox|racket|dbus-daemon|gracket(-text)?)$' | grep -w -v -f /tmp/leave-pids-$$`
   rm /tmp/leave-pids-$$
   kill -15 $KILL
   sleep 2
