@@ -75,6 +75,15 @@
           (stdout #"blah blah blah")))
    #t))
 
+(define (calculate-known-error? output-log)
+  (ormap
+   (λ (l)
+     (and (stdout? l)
+          (regexp-match (regexp-quote "raco test: @(test-known-error #t)")
+                        (stdout-bytes l))
+          #t))
+   output-log))
+
 (define (responsible-append x y)
   (set->responsible
    (set-union (responsible->set x)
@@ -90,6 +99,8 @@
  [calculate-responsible
   (-> (listof event?) string?)]
  [calculate-random?
+  (-> (listof event?) boolean?)]
+ [calculate-known-error?
   (-> (listof event?) boolean?)]
  [path-command-line
   (-> path-string? exact-nonnegative-integer?

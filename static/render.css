@@ -218,6 +218,10 @@ div.output p {
   text-align: center;
 }
 
+.frontpage tbody tr td {
+    text-align: center !important;
+}
+
 .dirlist tbody tr td.building {
   text-align: center;
 }

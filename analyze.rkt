@@ -166,7 +166,7 @@
                [(id ps) (in-hash ht)])
        (and 
         (for/or ([p (in-list ps)])
-          (not (rendering-random? 
+          (not (rendering-ignorable? 
                 (log-rendering 
                  (build-path* (revision-log-dir cur-rev)
                               p)))))
@@ -213,7 +213,7 @@
                                  (for/list ([f (in-list paths)]
                                             [i (in-range ERROR-LIMIT)]
                                             #:when (not 
-                                                    (rendering-random?
+                                                    (rendering-ignorable?
                                                      (log-rendering 
                                                       (build-path*
                                                        (revision-log-dir cur-rev)
@@ -304,6 +304,7 @@
             (define dur (status-duration log))
             (define any-stderr? (ormap stderr? output-log))
             (define random? (calculate-random? output-log))
+            (define known-error? (calculate-known-error? output-log))
             (define changed?
               (if (and (previous-rev)
                        (not random?))
@@ -323,7 +324,7 @@
                   ""))
             (define lc
               (list (path->bytes log-pth)))
-            (make-rendering.v2
+            (make-rendering.v3
              start end dur 
              (if (timeout? log) lc empty)
              (if (exit? log) 
@@ -332,7 +333,8 @@
              (if any-stderr? lc empty)
              responsible
              (if changed? lc empty)
-             random?)])))
+             random?
+             known-error?)])))
       #f))
 
 (define (dir-rendering dir-pth 
@@ -363,7 +365,7 @@
                           (acc-start acc-end acc-dur acc-timeouts
                            acc-unclean-exits acc-stderrs acc-responsible
                            acc-changed))
-                        (make-rendering.v2
+                        (make-rendering.v3
                          (min pth-start acc-start)
                          (max pth-end acc-end)
                          (+ pth-dur acc-dur)
@@ -374,8 +376,10 @@
                                              acc-responsible)
                          (lc+ pth-changed acc-changed)
                          (or (rendering-random? n)
-                             (rendering-random? acc)))])]))
-                (make-rendering.v2 
+                             (rendering-random? acc))
+                         (or (rendering-known-error? n)
+                             (rendering-known-error? acc)))])]))
+                (make-rendering.v3
                  +inf.0 -inf.0 0
                  empty empty empty
                  
@@ -388,6 +392,7 @@
                   "")
                  
                  empty
+                 #f
                  #f)
                 (directory-list* dir-pth))))
       #f))

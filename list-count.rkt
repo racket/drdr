@@ -32,9 +32,17 @@
     [else
      (append x y)]))
 
+(define (lc-sort l)
+  (cond
+    [(number? l)
+     l]
+    [else
+     (sort (remove-duplicates l) bytes<?)]))
+
 (provide/contract
  [list/count contract?]
  [lc+ (list/count list/count . -> . list/count)]
  [lc->number (list/count . -> . exact-nonnegative-integer?)]
+ [lc-sort (list/count . -> . list/count)]
  [lc->list (list/count . -> . (listof bytes?))]
  [lc-zero? (list/count . -> . boolean?)])

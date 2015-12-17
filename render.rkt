@@ -507,9 +507,11 @@
                         (rebase-path log-dir "/"))
                       `(div ([class "status"])
                             (div ([class "tag"]) "by status")
-                            ,@(for/list ([status (in-list responsible-ht-severity)]
-                                         [rendering->list-count (in-list (list rendering-timeout? rendering-unclean-exit?
-                                                                               rendering-stderr? rendering-changed?))])
+                            ,@(for/list ([status (in-list (cons "problems" responsible-ht-severity))]
+                                         [rendering->list-count (in-list
+                                                                 (cons (λ (r) (lc-sort (lc+ (rendering-stderr? r) (lc+ (rendering-timeout? r) (rendering-unclean-exit? r)))))
+                                                                       (list rendering-timeout? rendering-unclean-exit?
+                                                                             rendering-stderr? rendering-changed?)))])
                                 (define lc (rendering->list-count pth-rendering))
                                 (define rcss-id (symbol->string (gensym)))
                                 (define rg-id (symbol->string (gensym 'glyph)))
@@ -711,6 +713,9 @@ in.}
                                    @h1{What output patterns constitute a "change"?}
                                    @p{At the most basic level, if the bytes are different. However, there are a few subtleties. First, DrDr knows to ignore the result of @code{time}. Second, the standard output and standard error streams are compared independently. Finally, if the output stream contains @code{DrDr: This file has random output.} or @code{raco test: @"@"(test-random #t)} then changes do not affect any reporting DrDr would otherwise perform. The difference display pages present changed lines with a @span[([class "difference"])]{unique background}.}
 
+                                   @h1{What should I do if I know there is a problem but can't fix it now?}
+                                   @p{Have the program output @code{raco test: @"@"(test-random #t)} to standard output.}
+
                                    @h1{What do the green buttons do?}
                                    @p{They switch between revisions where there was a change from the previous revision.}
 
@@ -835,15 +840,12 @@ in.}
            (span ([class "breadcrumb"])
                  (span ([class "this"]) 
                        "DrDr"))
-           (table ([class "dirlist"])
+           (table ([class "dirlist frontpage"])
                   (thead
                    (tr (td "Push#")
                        (td "Duration (Abs)")
                        (td "Duration (Sum)")
-                       (td "Timeout?")
-                       (td "Unclean Exit?")
-                       (td "STDERR Output")
-                       (td "Changes")
+                       (td "Problems")
                        (td "Pusher")))
                   (tbody
                    ,@(map (match-lambda
@@ -858,7 +860,7 @@ in.}
                                                    (log->branches log))]
                                    [title ,title])
                                   (td (a ([href ,url]) ,name))
-                                  (td ([class "building"] [colspan "6"])
+                                  (td ([class "building"] [colspan "3"])
                                       "")
                                   (td ([class "author"]) ,committer))]
                             [(cons 'past rev-pth)
@@ -877,7 +879,7 @@ in.}
                                                      (log->branches log))]
                                      [title ,title])
                                     (td (a ([href "#"]) ,name))
-                                    (td ([class "building"] [colspan "6"])
+                                    (td ([class "building"] [colspan "3"])
                                         "Build in progress. Started "
                                         ,(format-duration-m
                                           (/ (- (current-seconds) mtime) 60))
@@ -893,9 +895,10 @@ in.}
                                  (match (dir-rendering (revision-log-dir rev))
                                    [#f
                                     (no-rendering-row)]
-                                   [(struct rendering 
-                                            (start end dur timeout unclean
-                                                   stderr responsible-party changes))
+                                   [(and ring
+                                         (struct rendering 
+                                           (start end dur timeout unclean
+                                                  stderr responsible-party changes)))
                                     (define abs-dur (- end start))
                                     
                                     `(tr ([class ,(format "dir ~a"
@@ -907,11 +910,14 @@ in.}
                                              ,(format-duration-ms abs-dur))
                                          (td ([sorttable_customkey ,(number->string dur)])
                                              ,(format-duration-ms dur))
-                                         ,@(map (lambda (vv)
-                                                  (define v (lc->number vv))
-                                                  `(td ([sorttable_customkey ,(number->string v)])
-                                                       ,(number->string/zero v)))
-                                                (list timeout unclean stderr changes))
+                                         ,(let ()
+                                            (define tn (lc->number timeout))
+                                            (define un (lc->number unclean))
+                                            (define sn (lc->number stderr))
+                                            ;; XXX subtract ignorable
+                                            (define v (+ tn un sn))
+                                            `(td ([sorttable_customkey ,(number->string v)])
+                                             ,(number->string/zero v)))
                                          (td ,committer))])))])
                           (list-limit
                            how-many-revs offset
