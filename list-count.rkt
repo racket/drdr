@@ -23,7 +23,8 @@
      (zero? x)]
     [(? list? x)
      (eq? empty x)]))
-(define (lc+ x y)
+
+(define (-lc+ x y)
   (cond
     [(number? x)
      (+ x (lc->number y))]
@@ -31,6 +32,10 @@
      (+ (lc->number x) y)]
     [else
      (append x y)]))
+
+(define (lc+ x . args)
+ (cond [(null? args) x]
+       [else (foldr -lc+ x args)]))
 
 (define (lc-sort l)
   (cond
@@ -41,7 +46,7 @@
 
 (provide/contract
  [list/count contract?]
- [lc+ (list/count list/count . -> . list/count)]
+ [lc+ ((list/count) #:rest (listof list/count) . ->* . list/count)]
  [lc->number (list/count . -> . exact-nonnegative-integer?)]
  [lc-sort (list/count . -> . list/count)]
  [lc->list (list/count . -> . (listof bytes?))]

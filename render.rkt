@@ -509,7 +509,7 @@
                             (div ([class "tag"]) "by status")
                             ,@(for/list ([status (in-list (cons "problems" responsible-ht-severity))]
                                          [rendering->list-count (in-list
-                                                                 (cons (λ (r) (lc-sort (lc+ (rendering-stderr? r) (lc+ (rendering-timeout? r) (rendering-unclean-exit? r)))))
+                                                                 (cons (λ (r) (lc-sort (lc+ (rendering-stderr? r) (rendering-timeout? r) (rendering-unclean-exit? r))))
                                                                        (list rendering-timeout? rendering-unclean-exit?
                                                                              rendering-stderr? rendering-changed?)))])
                                 (define lc (rendering->list-count pth-rendering))
@@ -915,7 +915,7 @@ in.}
                                             (define un (lc->number unclean))
                                             (define sn (lc->number stderr))
                                             ;; XXX subtract ignorable
-                                            (define v (+ tn un sn))
+                                            (define v (lc->number (lc-sort (lc+ stderr timeout unclean))))
                                             `(td ([sorttable_customkey ,(number->string v)])
                                              ,(number->string/zero v)))
                                          (td ,committer))])))])
