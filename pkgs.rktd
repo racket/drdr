@@ -14,6 +14,7 @@
  "sha"
  "http"
  "aws"
+ "bcrypt"
  ("s3-sync" "git://github.com/mflatt/s3-sync")
  ("pkg-push" "git://github.com/racket/pkg-push/")
  ("pkg-index" "git://github.com/racket/pkg-index/")
