@@ -51,6 +51,14 @@
       (build-path log-dir "pkg-src" "build" "make")
       (make-path)
       (list "-j" (number->string (number-of-cpus))))))
+  #;
+  (parameterize ([current-directory co-dir])
+    (run/collect/wait/log
+     #:timeout (current-make-install-timeout-seconds)
+     #:env (current-env)
+     (build-path log-dir "pkg-src" "build" "read-only")
+     (chmod-path)
+     (list "-R" "a=rX" "racket")))
   (run/collect/wait/log
    #:timeout (current-make-install-timeout-seconds)
    #:env (current-env)
