@@ -231,6 +231,7 @@
                  [pth-cmd
                   (submit-job!
                    the-queue
+                   (pth-cmd (λ (x) x))
                    (lambda ()
                      (dynamic-wind
                          void
@@ -306,14 +307,29 @@
   (notify! "Starting testing")
   (when (test-directories pkgs-pths top-sema)
     (notify! "All testing scheduled... waiting for completion")
-    (sync
-     top-sema
-     (handle-evt
-      (alarm-evt 
-       (+ (current-inexact-milliseconds)
-          (* 1000 (* 2 (current-make-install-timeout-seconds)))))
-      (λ _
-        (kill-thread (current-thread))))))
+    (define the-deadline
+      (+ (current-inexact-milliseconds)
+         (* 1000 (* 2 (current-make-install-timeout-seconds)))))
+    (define the-deadline-evt
+      (handle-evt
+       (alarm-evt the-deadline)
+       (λ _
+         (kill-thread (current-thread)))))
+    (let loop ()
+      (sync top-sema
+            the-deadline-evt
+            (handle-evt
+             (alarm-evt (+ (current-inexact-milliseconds)
+                           (* 1000 60)))
+             (λ _
+               (define-values (queued-js active-js) (job-queue-jobs test-workers))
+               (notify! "Testing still in progress. [~a queued jobs ~e] [~a active jobs ~e]"
+                        (length queued-js) queued-js
+                        (length active-js) active-js)
+               (notify! "Testing has until ~a (~a) to finish"
+                        the-deadline
+                        (seconds->string (/ the-deadline 1000)))
+               (loop))))))
   (notify! "Stopping testing")
   (stop-job-queue! test-workers))
 
