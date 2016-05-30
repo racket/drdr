@@ -24,6 +24,8 @@ run_loop () { # <basename> <kill?>
       echo "clearing unattached shm regions"
       ipcs -ma | awk '0 == $6 {print $2}' | xargs -n 1 ipcrm -m
     fi
+    echo "$1: setting core dump"
+    ulimit -c 100000
     echo "$1: compiling"
     "$PLTROOT/bin/raco" make "$1.rkt"
     echo "$1: running"
