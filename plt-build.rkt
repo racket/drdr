@@ -428,7 +428,10 @@
                     (notify! "Starting test of rev ~a" rev)
                     (test-revision rev)))))
      ;; Remove the test directory
-     (safely-delete-directory test-dir))))
+     (safely-delete-directory home-dir)
+     (safely-delete-directory tmp-dir)
+     (safely-delete-directory lock-dir)
+     (safely-delete-directory planet-dir))))
 
 (provide/contract
  [integrate-revision (exact-nonnegative-integer? . -> . void)])

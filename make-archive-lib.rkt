@@ -21,6 +21,7 @@
          (safely-delete-directory (revision-trunk.tar.7z rev))
          (create-archive tmp-path (revision-dir rev))
          (rename-file-or-directory tmp-path archive-path)
+         (safely-delete-directory (build-path (revision-dir rev) "test"))
          (safely-delete-directory (revision-log-dir rev))
          (safely-delete-directory (revision-analyze-dir rev))
          (for ([x (in-list '("analyzed" "archiving-done" "checkout-done"
