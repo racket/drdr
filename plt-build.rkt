@@ -61,18 +61,21 @@
          "-C" (path->string rev-dir)
          "trunk")))
 
-(define (call-with-temporary-directory thunk)
-  (define tempdir (symbol->string (gensym 'tmpdir)))
+(define (delete-directory/files-unless-core d)
+  (unless (file-exists? (build-path d "core"))
+    (delete-directory/files d)))
+(define (call-with-temporary-directory n thunk)
+  (define nd (build-path (current-directory) n))
   (dynamic-wind
       (lambda ()
-        (make-directory* tempdir))
+        (make-directory* nd))
       (lambda ()
-        (parameterize ([current-directory tempdir])
+        (parameterize ([current-directory nd])
           (thunk)))
       (lambda ()
-        (delete-directory/files tempdir))))
-(define-syntax-rule (with-temporary-directory e)
-  (call-with-temporary-directory (lambda () e)))
+        (delete-directory/files-unless-core nd))))
+(define-syntax-rule (with-temporary-directory n e)
+  (call-with-temporary-directory n (lambda () e)))
 
 (define-syntax-rule
   (define-with-temporary-planet-directory with-temporary-planet-directory env-str)
@@ -165,10 +168,12 @@
     (thunk)))
 
 (define-runtime-path pkgs-file "pkgs.rktd")
-
 (define (tested-packages)
   (define val (file->value pkgs-file))
   val)
+
+(define (log-pth->dir-name lp)
+  (regexp-replace* #rx"/" (path->string lp) "_"))
 
 (define (test-revision rev)
   (define rev-dir (revision-dir rev))
@@ -246,13 +251,14 @@
                                (with-temporary-tmp-directory
                                 (with-temporary-planet-directory
                                  (with-temporary-home-directory
-                                  (with-temporary-directory
-                                   (run/collect/wait/log
-                                    log-pth
-                                    #:timeout (current-make-install-timeout-seconds)
-                                    #:env (current-env)
-                                    (first l)
-                                    (rest l))))))))))
+                                   (with-temporary-directory
+                                     (log-pth->dir-name log-pth)
+                                     (run/collect/wait/log
+                                      log-pth
+                                      #:timeout (current-make-install-timeout-seconds)
+                                      #:env (current-env)
+                                      (first l)
+                                      (rest l))))))))))
                          (λ ()
                            (semaphore-post dir-sema)))))]
                  [else
