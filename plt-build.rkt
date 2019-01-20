@@ -50,7 +50,7 @@
       #:env (current-env)
       (build-path log-dir "pkg-src" "build" "make")
       (make-path)
-      (list "-j" (number->string (number-of-cpus))))))
+      (list "-j" (number->string (number-of-cpus)) "both"))))
   (run/collect/wait/log
    #:timeout (current-make-install-timeout-seconds)
    #:env (current-env)
@@ -185,8 +185,8 @@
     (rebase-path trunk-dir log-dir))
   (define racket-path
     (path->string (build-path trunk-dir "racket" "bin" "racket")))
-  (define raco-path
-    (path->string (build-path trunk-dir "racket" "bin" "raco")))
+  (define (raco-path cs?)
+    (path->string (build-path trunk-dir "racket" "bin" (if cs? "racocs" "raco"))))
   (define test-workers (make-job-queue (number-of-cpus)))
 
   (define pkgs-pths
@@ -230,35 +230,38 @@
                  (match pth-cmd/general
                    [(list-rest 'raco rst)
                     (values
-                     (lambda (k) (k (list* raco-path rst)))
+                     (lambda (cs? k)
+                       (k (list* (raco-path cs?) rst)))
                      test-workers)]))
                (cond
                  [pth-cmd
+                  (define cs? #f) ;; XXX
                   (submit-job!
                    the-queue
-                   (pth-cmd (λ (x) x))
+                   (pth-cmd cs? (λ (x) x))
                    (lambda ()
                      (dynamic-wind
                          void
                          (λ ()
                            (pth-cmd
+                            cs?
                             (λ (l)
                               (with-env
-                               (["DISPLAY"
-                                 (format ":~a"
-                                         (cpu->child
-                                          (current-worker)))])
-                               (with-temporary-tmp-directory
-                                (with-temporary-planet-directory
-                                 (with-temporary-home-directory
-                                   (with-temporary-directory
-                                     (log-pth->dir-name log-pth)
-                                     (run/collect/wait/log
-                                      log-pth
-                                      #:timeout (current-make-install-timeout-seconds)
-                                      #:env (current-env)
-                                      (first l)
-                                      (rest l))))))))))
+                                (["DISPLAY"
+                                  (format ":~a"
+                                          (cpu->child
+                                           (current-worker)))])
+                                (with-temporary-tmp-directory
+                                  (with-temporary-planet-directory
+                                    (with-temporary-home-directory
+                                      (with-temporary-directory
+                                        (log-pth->dir-name log-pth)
+                                        (run/collect/wait/log
+                                         log-pth
+                                         #:timeout (current-make-install-timeout-seconds)
+                                         #:env (current-env)
+                                         (first l)
+                                         (rest l))))))))))
                          (λ ()
                            (semaphore-post dir-sema)))))]
                  [else
@@ -277,7 +280,7 @@
        #:timeout (current-make-install-timeout-seconds)
        #:env (current-env)
        (build-path log-dir "pkg" name)
-       raco-path
+       (raco-path #f)
        (list "pkg" "install" "--skip-installed" "-i" "--deps" "fail" "--name" name source)))
     (match pp
       [`(,name ,source) (run name source)]
@@ -286,7 +289,7 @@
    #:timeout (current-subprocess-timeout-seconds)
    #:env (current-env)
    (build-path log-dir "pkg-show")
-   raco-path
+   (raco-path #f)
    (list "pkg" "show" "-al" "--full-checksum"))
   (run/collect/wait/log
    #:timeout (current-subprocess-timeout-seconds)
