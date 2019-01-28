@@ -146,8 +146,7 @@
           (for/list
               ([(branch cs) branches])
             (match-define (vector start-commit end-commit) cs)
-            (parameterize
-                ([current-directory repo])
+            (parameterize ([current-directory repo])
               (printf "read-commits ~v ~v ~v\n" branch start-commit end-commit)
               (system/output-port
                #:k (curry read-commits branch)

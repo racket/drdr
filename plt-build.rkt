@@ -390,7 +390,6 @@
                     [current-temporary-directory tmp-dir]
                     [current-rev rev])
        (with-env (["PLTSTDERR" "error"]
-                  ["GIT_DIR" (path->string (plt-repository))]
                   ["TMPDIR" (path->string tmp-dir)]
                   ["PLTDRDR" "yes"]
                   ["PATH"
