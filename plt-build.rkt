@@ -177,12 +177,13 @@
 
 (define (test-revision rev)
   (define rev-dir (revision-dir rev))
-  (define trunk-dir
-    (revision-trunk-dir rev))
-  (define log-dir
-    (revision-log-dir rev))
-  (define trunk->log
-    (rebase-path trunk-dir log-dir))
+  (define trunk-dir (revision-trunk-dir rev))
+  (define log-dir (revision-log-dir rev))
+  (define trunk->log (rebase-path trunk-dir log-dir))
+  (define trunk->log+cs
+    (rebase-path trunk-dir (build-path log-dir "cs")))
+  (define (trunk->log/cs p cs?)
+    ((if cs? trunk->log+cs trunk->log) p))
   (define racket-path
     (path->string (build-path trunk-dir "racket" "bin" "racket")))
   (define (raco-path cs?)
@@ -193,8 +194,8 @@
     (list (build-path trunk-dir "racket" "collects")
           (build-path trunk-dir "pkgs")
           (build-path trunk-dir "racket" "share" "pkgs")))
-  (define (test-directory dir-pth upper-sema)
-    (define dir-log (build-path (trunk->log dir-pth) ".index.test"))
+  (define (test-directory cs? dir-pth upper-sema)
+    (define dir-log (build-path (trunk->log/cs dir-pth cs?) ".index.test"))
     (cond
       [(read-cache* dir-log)
        (semaphore-post upper-sema)]
@@ -211,33 +212,24 @@
                #:cache-keys? #t))
        (for ([sub-pth (in-list files)])
          (define pth (build-path dir-pth sub-pth))
-         (define directory? (directory-exists? pth))
          (cond
-           [directory?
-            (test-directory pth dir-sema)]
+           [(directory-exists? pth)
+            (test-directory cs? pth dir-sema)]
            [else
-            (define log-pth (trunk->log pth))
+            (define log-pth (trunk->log/cs pth cs?))
             (cond
               [(file-exists? log-pth)
                (semaphore-post dir-sema)]
               [else
-               (define pth-timeout
-                 (current-subprocess-timeout-seconds))
-               (define pth-cmd/general
-                 (path-command-line pth pth-timeout))
-               (define-values
-                 (pth-cmd the-queue)
-                 (match pth-cmd/general
+               (define pth-cmd
+                 (match (path-command-line pth (current-subprocess-timeout-seconds))
                    [(list-rest 'raco rst)
-                    (values
-                     (lambda (cs? k)
-                       (k (list* (raco-path cs?) rst)))
-                     test-workers)]))
+                    (lambda (cs? k)
+                      (k (list* (raco-path cs?) rst)))]))
                (cond
                  [pth-cmd
-                  (define cs? #f) ;; XXX
                   (submit-job!
-                   the-queue
+                   test-workers
                    (pth-cmd cs? (λ (x) x))
                    (lambda ()
                      (dynamic-wind
@@ -274,23 +266,28 @@
           (write-cache! dir-log (current-seconds))
           (semaphore-post upper-sema)))]))
   ;; Some setup
-  (for ([pp (in-list (tested-packages))])
-    (define (run name source)
-      (run/collect/wait/log
-       #:timeout (current-make-install-timeout-seconds)
-       #:env (current-env)
-       (build-path log-dir "pkg" name)
-       (raco-path #f)
-       (list "pkg" "install" "--skip-installed" "-i" "--deps" "fail" "--name" name source)))
-    (match pp
-      [`(,name ,source) (run name source)]
-      [(? string? name) (run name name)]))
-  (run/collect/wait/log
-   #:timeout (current-subprocess-timeout-seconds)
-   #:env (current-env)
-   (build-path log-dir "pkg-show")
-   (raco-path #f)
-   (list "pkg" "show" "-al" "--full-checksum"))
+  (for ([cs? (in-list '(#f #t))])
+    (define this-base
+      (if cs?
+        (build-path log-dir "cs")
+        log-dir))
+    (for ([pp (in-list (tested-packages))])
+      (define (run name source)
+        (run/collect/wait/log
+         #:timeout (current-make-install-timeout-seconds)
+         #:env (current-env)
+         (build-path this-base "pkg" name)
+         (raco-path cs?)
+         (list "pkg" "install" "--skip-installed" "-i" "--deps" "fail" "--name" name source)))
+      (match pp
+        [`(,name ,source) (run name source)]
+        [(? string? name) (run name name)]))
+    (run/collect/wait/log
+     #:timeout (current-subprocess-timeout-seconds)
+     #:env (current-env)
+     (build-path this-base "pkg-show")
+     (raco-path cs?)
+     (list "pkg" "show" "-al" "--full-checksum")))
   (run/collect/wait/log
    #:timeout (current-subprocess-timeout-seconds)
    #:env (current-env)
@@ -300,11 +297,11 @@
          (path->string*
           (build-path (drdr-directory) "set-browser.rkt"))))
   ;; And go
-  (define (test-directories ps upper-sema)
+  (define (test-directories cs? ps upper-sema)
     (define list-sema (make-semaphore 0))
     (define how-many 
       (for/sum ([p (in-list ps)] #:when (directory-exists? p))
-        (test-directory p list-sema)
+        (test-directory cs? p list-sema)
         1))
     (and (not (zero? how-many))
          (thread
@@ -312,33 +309,35 @@
             (semaphore-wait* list-sema how-many)
             (semaphore-post upper-sema)))))
 
-  (define top-sema (make-semaphore 0))
-  (notify! "Starting testing")
-  (when (test-directories pkgs-pths top-sema)
-    (notify! "All testing scheduled... waiting for completion")
-    (define the-deadline
-      (+ (current-inexact-milliseconds)
-         (* 1000 (* 2 (current-make-install-timeout-seconds)))))
-    (define the-deadline-evt
-      (handle-evt
-       (alarm-evt the-deadline)
-       (λ _
-         (kill-thread (current-thread)))))
-    (let loop ()
-      (sync top-sema
-            the-deadline-evt
-            (handle-evt
-             (alarm-evt (+ (current-inexact-milliseconds)
-                           (* 1000 60)))
-             (λ _
-               (define-values (queued-js active-js) (job-queue-jobs test-workers))
-               (notify! "Testing still in progress. [~a queued jobs ~e] [~a active jobs ~e]"
-                        (length queued-js) queued-js
-                        (length active-js) active-js)
-               (notify! "Testing has until ~a (~a) to finish"
-                        the-deadline
-                        (seconds->string (/ the-deadline 1000)))
-               (loop))))))
+  (for ([cs? (in-list '(#f #t))])
+    (define top-sema (make-semaphore 0))
+    (notify! "Starting testing with cs? = ~a" cs?)
+    (when (test-directories cs? pkgs-pths top-sema)
+      (notify! "All testing scheduled... waiting for completion")
+      (define the-deadline
+        (+ (current-inexact-milliseconds)
+           (* 1000 (* 2 (current-make-install-timeout-seconds)))))
+      (define the-deadline-evt
+        (handle-evt
+         (alarm-evt the-deadline)
+         (λ _
+           (kill-thread (current-thread)))))
+      (let loop ()
+        (sync top-sema
+              the-deadline-evt
+              (handle-evt
+               (alarm-evt (+ (current-inexact-milliseconds)
+                             (* 1000 60)))
+               (λ _
+                 (define-values (queued-js active-js) (job-queue-jobs test-workers))
+                 (notify! "Testing still in progress. [~a queued jobs ~e] [~a active jobs ~e]"
+                          (length queued-js) queued-js
+                          (length active-js) active-js)
+                 (notify! "Testing has until ~a (~a) to finish"
+                          the-deadline
+                          (seconds->string (/ the-deadline 1000)))
+                 (loop)))))))
+  
   (notify! "Stopping testing")
   (stop-job-queue! test-workers))
 
