@@ -62,7 +62,9 @@
          "trunk")))
 
 (define (delete-directory/files-unless-core d)
-  (unless (file-exists? (build-path d "core"))
+  (unless
+      #f ;; XXX Disabled for a while
+      #;(file-exists? (build-path d "core"))
     (delete-directory/files d)))
 (define (call-with-temporary-directory n thunk)
   (define nd (build-path (current-directory) n))
