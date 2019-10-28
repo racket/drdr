@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export PLTSTDERR="info"
+export PLTSTDERR="error"
 PLTROOT="/opt/plt/plt"
 LOGS="/opt/plt/logs"
 R="$PLTROOT/bin/racket"

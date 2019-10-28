@@ -49,12 +49,15 @@
           (stdout #"blah blah blah")))
    "robby")
   (check-equal?
-   (calculate-responsible
-    (list (stdout #"blah blah blah")
-          (stdout #"blah blah blah")
-          (stdout #"raco test: @(test-responsible '(robby jay))")
-          (stdout #"blah blah blah")))
-   "robby,jay"))
+   (list->set
+    (string-split
+     (calculate-responsible
+      (list (stdout #"blah blah blah")
+            (stdout #"blah blah blah")
+            (stdout #"raco test: @(test-responsible '(robby jay))")
+            (stdout #"blah blah blah")))
+     ","))
+   (set "robby" "jay")))
 
 (define (calculate-random? output-log)
   (ormap
