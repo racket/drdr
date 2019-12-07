@@ -18,6 +18,7 @@
  "aws"
  "bcrypt"
  ("s3-sync" "git://github.com/mflatt/s3-sync")
+ ("plt-service-monitor" "git://github.com/racket/plt-service-monitor")
  ("pkg-push" "git://github.com/racket/pkg-push/")
  ("pkg-index" "git://github.com/racket/pkg-index/")
  ("pkg-build" "git://github.com/racket/pkg-build/"))
