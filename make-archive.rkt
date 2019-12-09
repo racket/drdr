@@ -22,7 +22,7 @@
                        [(many)
                         (local [(define all-revisions
                                   (sort (unbox revisions-b) >=))]
-                               (for/or ([rev (in-list (list-tail all-revisions n))])
+                               (for ([rev (in-list (list-tail all-revisions n))])
                                  (make-archive rev)))]
                        [(single)
                         (make-archive n)])))
