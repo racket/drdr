@@ -31,6 +31,8 @@
   (make-parameter "/usr/bin/make"))
 (define tar-path
   (make-parameter "/bin/tar"))
+(define bash-path
+  (make-parameter "/bin/bash"))
 
 (define Xvfb-path
   (make-parameter "/usr/bin/Xvfb"))

@@ -52,6 +52,14 @@
       (make-path)
       (list "-j" (number->string (number-of-cpus)) "both"))))
   (run/collect/wait/log
+   #:timeout (current-subprocess-timeout-seconds)
+   #:env (current-env)
+   (build-path log-dir "pkg-src" "build" "ChezScheme-checksum")
+   (bash-path)
+   (list (path->string*
+          (build-path (drdr-directory) "ChezScheme-checksum.sh"))
+         (path->string rev-dir)))
+  (run/collect/wait/log
    #:timeout (current-make-install-timeout-seconds)
    #:env (current-env)
    (build-path log-dir "pkg-src" "build" "archive")
