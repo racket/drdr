@@ -115,6 +115,7 @@
  [plt-future-build-directory (-> path?)]
  [drdr-directory (parameter/c path-string?)]
  [tar-path (parameter/c (or/c false/c string?))]
+ [bash-path (parameter/c (or/c false/c string?))]
  [make-path (parameter/c (or/c false/c string?))]
  [Xvfb-path (parameter/c (or/c false/c string?))]
  [vncviewer-path (parameter/c (or/c false/c string?))] 
