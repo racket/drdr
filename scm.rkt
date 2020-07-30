@@ -216,13 +216,17 @@
   (define start (git-push-start-commit gp))
   (parameterize ([current-directory (plt-repository)])
     (system/output-port
-     #:k (λ (port) (read-line port))
+     #:k (λ (port)
+           (define v (read-line port))
+           (if (eof-object? v)
+             "xxxxxxxxxxxxxxxxxxxxxxxxx"
+             v))
      (git-path)
      "--no-pager" "log" "--format=format:%P" start "-1")))
 (define (git-push-start-commit gp)
   (define cs (git-push-commits gp))
   (if (empty? cs)
-      "xxxxxxxxxxxxxxxxxxxxxxxxx"
+    "xxxxxxxxxxxxxxxxxxxxxxxxx"
       (git-commit-hash* (last cs))))
 (define (git-push-end-commit gp)
   (define cs (git-push-commits gp))
