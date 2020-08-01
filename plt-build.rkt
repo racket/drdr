@@ -189,7 +189,13 @@
   (define racket-path
     (path->string (build-path trunk-dir "racket" "bin" "racket")))
   (define (raco-path cs?)
-    (path->string (build-path trunk-dir "racket" "bin" (if cs? "racocs" "raco"))))
+    (define (make-path suffix)
+      (path->string (build-path trunk-dir "racket" "bin" (string-append "raco" suffix))))
+    (define suffixed-p (make-path (if cs? "cs" "bc")))
+    (if (file-exists? suffixed-p)
+        suffixed-p
+        ;; Assume that the requested variant is the default one
+        (make-path "")))
   (define test-workers (make-job-queue (number-of-cpus)))
 
   (define pkgs-pths
