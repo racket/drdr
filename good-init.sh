@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export PLTSTDERR="error"
+export PLTSTDERR="info"
 PLTROOT="/opt/plt/plt"
 LOGS="/opt/plt/logs"
 R="$PLTROOT/bin/racket"
@@ -44,4 +44,4 @@ run_loop () { # <basename> <kill?>
 exec
 
 run_loop render &
-run_loop main yes &
+run_loop main yes

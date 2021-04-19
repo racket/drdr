@@ -3,6 +3,7 @@
          racket/match
          racket/list
          racket/contract/base
+         racket/async-channel
          "status.rkt"
          "notify.rkt"
          "rewriting.rkt"
@@ -32,6 +33,9 @@
      command args))
   (define command-line
     (list* command args))
+
+  (notify! "Running: ~a ~S" command args)
+
   (define-values
     (the-process stdout stdin stderr)
     (parameterize ([subprocess-group-enabled #t])
@@ -39,26 +43,22 @@
              #f #f #f
              new-command 
              new-args)))
-  
-  (notify! "Running: ~a ~S" command args)  
-  
   ; Run it without input
   (close-output-port stdin)
-  
   ; Wait for all the output and the process death or timeout
   (local
     [(define the-alarm
        (alarm-evt (+ start-time (* 1000 timeout))))
-     
-     (define line-ch (make-channel))
+
+     (define line-ch (make-async-channel))
      (define (read-port-t make port)
        (thread
         (λ ()
           (let loop ()
             (define l (read-bytes-line port))
             (if (eof-object? l)
-                (channel-put line-ch l)
-                (begin (channel-put line-ch (make l))
+                (async-channel-put line-ch l)
+                (begin (async-channel-put line-ch (make l))
                        (loop)))))))
      (define stdout-t (read-port-t make-stdout stdout))
      (define stderr-t (read-port-t make-stderr stderr))
@@ -98,11 +98,12 @@
                    (if output-done?
                        never-evt
                        (handle-evt line-ch
-                                   (match-lambda
+                                   (lambda (l)
+                                   (match l
                                      [(? eof-object?)
                                       (loop (sub1 open-ports) end-time status log)]
                                      [l
-                                      (loop open-ports end-time status (list* l log))])))))))]
+                                      (loop open-ports end-time status (list* l log))]))))))))]
     
     (close-input-port stdout)
     (close-input-port stderr)
@@ -130,6 +131,8 @@
   (cache/file
    log-path
    (lambda ()
+     (notify! "No cache: ~a" log-path)
+
      (define rev (number->string (current-rev)))
      (define home (hash-ref env "HOME"))
      (define tmp (hash-ref env "TMPDIR"))

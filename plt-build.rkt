@@ -76,8 +76,8 @@
           (thunk)))
       (lambda ()
         (delete-directory/files-unless-core nd))))
-(define-syntax-rule (with-temporary-directory n e)
-  (call-with-temporary-directory n (lambda () e)))
+(define-syntax-rule (with-temporary-directory n . e)
+  (call-with-temporary-directory n (lambda () . e)))
 
 (define-syntax-rule
   (define-with-temporary-planet-directory with-temporary-planet-directory env-str)
@@ -94,8 +94,8 @@
                       (thunk)))
           (lambda ()
             (delete-directory/files tempdir))))
-    (define-syntax-rule (with-temporary-planet-directory e)
-      (call-with-temporary-planet-directory (lambda () e)))))
+    (define-syntax-rule (with-temporary-planet-directory . e)
+      (call-with-temporary-planet-directory (lambda () . e)))))
 (define-with-temporary-planet-directory with-temporary-planet-directory "PLTPLANETDIR")
 (define-with-temporary-planet-directory with-temporary-tmp-directory "TMPDIR")
 
@@ -112,16 +112,15 @@
                            (notify! "Failed while copying HOME: ~a"
                                     (exn-message x)))])
           (delete-directory/files new-dir)
-          (copy-directory/files
-           (hash-ref (current-env) "HOME")
-           new-dir)))
+          (define from (hash-ref (current-env) "HOME"))
+          (copy-directory/files from new-dir)))
       (lambda ()
         (with-env (["HOME" (path->string new-dir)])
                   (thunk)))
       (lambda ()
         (delete-directory/files new-dir))))
-(define-syntax-rule (with-temporary-home-directory e)
-  (call-with-temporary-home-directory (lambda () e)))
+(define-syntax-rule (with-temporary-home-directory . e)
+  (call-with-temporary-home-directory (lambda () . e)))
 
 (define (with-running-program command args thunk)
   (if command
@@ -218,6 +217,14 @@
                          0
                          1))
                #:cache-keys? #t))
+       (thread
+        (lambda ()
+          (define how-many (length files))
+          (notify! "Dir ~a waiting for ~a jobs" dir-pth how-many)
+          (semaphore-wait* dir-sema how-many)
+          (notify! "Done with dir: ~a" dir-pth)
+          (write-cache! dir-log (current-seconds))
+          (semaphore-post upper-sema)))
        (for ([sub-pth (in-list files)])
          (define pth (build-path dir-pth sub-pth))
          (cond
@@ -236,43 +243,43 @@
                       (k (list* (raco-path cs?) rst)))]))
                (cond
                  [pth-cmd
+                  (define cmd (pth-cmd cs? (λ (x) x)))
+                  (define lab (vector cmd (current-seconds) #f 'submit))
                   (submit-job!
-                   test-workers
-                   (pth-cmd cs? (λ (x) x))
+                   test-workers lab
                    (lambda ()
+                     (define (status! v) (vector-set! lab 3 v))
+                     (status! 'start)
+                     (vector-set! lab 2 (current-seconds))
+                     (notify! "job start: ~v" lab)
                      (dynamic-wind
                          void
                          (λ ()
-                           (pth-cmd
-                            cs?
-                            (λ (l)
-                              (with-env
-                                (["DISPLAY"
-                                  (format ":~a"
-                                          (cpu->child
-                                           (current-worker)))])
-                                (with-temporary-tmp-directory
-                                  (with-temporary-planet-directory
-                                    (with-temporary-home-directory
-                                      (with-temporary-directory
-                                        (log-pth->dir-name log-pth)
-                                        (run/collect/wait/log
-                                         log-pth
-                                         #:timeout (current-make-install-timeout-seconds)
-                                         #:env (current-env)
-                                         (first l)
-                                         (rest l))))))))))
+                            (with-env
+                              (["DISPLAY"
+                                (format ":~a"
+                                        (cpu->child
+                                          (current-worker)))])
+                              (status! 'env)
+                              (with-temporary-tmp-directory
+                                (status! 'tmp)
+                                (with-temporary-planet-directory
+                                  (status! 'planet)
+                                  (with-temporary-home-directory
+                                    (status! 'home)
+                                    (with-temporary-directory
+                                      (log-pth->dir-name log-pth)
+                                      (status! 'tmp2)
+                                      (run/collect/wait/log
+                                        log-pth
+                                        #:timeout (current-make-install-timeout-seconds)
+                                        #:env (current-env)
+                                        (first cmd)
+                                        (rest cmd))))))))
                          (λ ()
                            (semaphore-post dir-sema)))))]
                  [else
-                  (semaphore-post dir-sema)])])]))
-       (thread
-        (lambda ()
-          (define how-many (length files))
-          (semaphore-wait* dir-sema how-many)
-          (notify! "Done with dir: ~a" dir-pth)
-          (write-cache! dir-log (current-seconds))
-          (semaphore-post upper-sema)))]))
+                  (semaphore-post dir-sema)])])]))]))
   ;; Some setup
   (for ([cs? (in-list '(#f #t))])
     (define this-base
@@ -286,7 +293,7 @@
          #:env (current-env)
          (build-path this-base "pkg" name)
          (raco-path cs?)
-         (list "pkg" "install" "--skip-installed" "-i" "--deps" "fail" "--name" name source)))
+         (list "pkg" "install" "--no-cache" "--skip-installed" "-i" "--deps" "fail" "--name" name source)))
       (match pp
         [`(,name ,source) (run name source)]
         [(? string? name) (run name name)]))
@@ -305,47 +312,53 @@
          (path->string*
           (build-path (drdr-directory) "set-browser.rkt"))))
   ;; And go
-  (define (test-directories cs? ps upper-sema)
+  (define (test-directories ps upper-sema)
     (define list-sema (make-semaphore 0))
-    (define how-many 
+    (define how-many
       (for/sum ([p (in-list ps)] #:when (directory-exists? p))
-        (test-directory cs? p list-sema)
+        (for ([cs? (in-list '(#f #t))])
+          (test-directory cs? p list-sema))
         1))
-    (and (not (zero? how-many))
-         (thread
-          (lambda ()
-            (semaphore-wait* list-sema how-many)
-            (semaphore-post upper-sema)))))
+    (thread
+      (lambda ()
+        (semaphore-wait* list-sema (* 2 how-many))
+        (semaphore-post upper-sema))))
 
-  (for ([cs? (in-list '(#f #t))])
-    (define top-sema (make-semaphore 0))
-    (notify! "Starting testing with cs? = ~a" cs?)
-    (when (test-directories cs? pkgs-pths top-sema)
-      (notify! "All testing scheduled... waiting for completion")
-      (define the-deadline
-        (+ (current-inexact-milliseconds)
-           (* 1000 (* 2 (current-make-install-timeout-seconds)))))
-      (define the-deadline-evt
-        (handle-evt
-         (alarm-evt the-deadline)
-         (λ _
+  (define top-sema (make-semaphore 0))
+  (notify! "Starting testing with")
+  (thread (lambda ()
+    (test-directories pkgs-pths top-sema)
+    (notify! "All testing scheduled... waiting for completion")))
+
+  (define the-start (current-inexact-milliseconds))
+  (let loop ()
+    (define-values (queued-js active-js) (job-queue-jobs test-workers))
+    (notify! "Testing still in progress. [~a queued jobs] [~a active jobs]"
+             (length queued-js) (length active-js))
+    (define (show-jobs l js)
+      (for ([j (in-list js)])
+        (match-define (vector jl s e st) j)
+        (notify! "\t~a: ~a/~a ~v" l st (and e (- e s)) jl)))
+    (show-jobs "Q" queued-js)
+    (show-jobs "A" active-js)
+    (define how-many (+ (length queued-js) (length active-js)))
+    (define the-deadline
+      (+ the-start (current-make-install-timeout-seconds)))
+    (define the-deadline-evt
+      (handle-evt
+        (alarm-evt the-deadline)
+        (λ _
            (kill-thread (current-thread)))))
-      (let loop ()
-        (sync top-sema
-              the-deadline-evt
-              (handle-evt
-               (alarm-evt (+ (current-inexact-milliseconds)
-                             (* 1000 60)))
-               (λ _
-                 (define-values (queued-js active-js) (job-queue-jobs test-workers))
-                 (notify! "Testing still in progress. [~a queued jobs ~e] [~a active jobs ~e]"
-                          (length queued-js) queued-js
-                          (length active-js) active-js)
-                 (notify! "Testing has until ~a (~a) to finish"
-                          the-deadline
-                          (seconds->string (/ the-deadline 1000)))
-                 (loop)))))))
-  
+    (notify! "Testing has until ~a (~a) to finish"
+             the-deadline
+             (seconds->string (/ the-deadline 1000)))
+    (sync top-sema
+          the-deadline-evt
+          (handle-evt
+            (alarm-evt (+ (current-inexact-milliseconds)
+                          (* 1000 60)))
+            (λ _ (loop)))))
+
   (notify! "Stopping testing")
   (stop-job-queue! test-workers))
 
