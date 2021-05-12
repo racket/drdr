@@ -15,6 +15,7 @@ others don't accidentally conflict.
 9114 - tests/web-server/e2e/read-write
 9115 - tests/web-server/e2e/tls
 9990 - tests/pkg
+9996 - tests/pkg
 9997 - tests/pkg
 9998 - tests/pkg
 9999 - tests/web-server
