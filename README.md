@@ -1,7 +1,6 @@
 # drdr
 
-This the source for the Racket package: "drdr", which runs
-drdr.racket-lang.org.
+This the source for the Racket package: "drdr", which runs [drdr].
 
 It currently only runs on a single machine that is set up in an intricate way.
 -- In particular, config.rkt mentions many of those details
@@ -27,6 +26,7 @@ is licensed under the [Apache 2.0] license and the [MIT] license.
 
 [MIT]: https://github.com/racket/racket/blob/master/racket/src/LICENSE-MIT.txt
 [Apache 2.0]: https://www.apache.org/licenses/LICENSE-2.0.txt
+[drdr]: http://drdr.racket-lang.org
 [pull request]: https://github.com/racket/drdr/pulls
 [issue]: https://github.com/racket/drdr/issues
 [development mailing list]: https://lists.racket-lang.org
