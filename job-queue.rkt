@@ -1,7 +1,6 @@
 #lang racket/base
 (require racket/list
          racket/match
-	 "notify.rkt"
          racket/local
          racket/contract
          racket/async-channel)
@@ -102,11 +101,7 @@
   (define the-workers
     (for/list ([i (in-range 0 how-many)])
       (thread (lambda ()
-		(with-handlers ([void
-				 (lambda (e)
-				   (notify! "worker ~a failed with exception ~a" i e)
-				   (raise e))])
-		  (worker i))))))
+                (worker i)))))
   (define the-manager
     (thread (lambda () (working-manager how-many #t empty empty empty))))
   (make-job-queue jobs-ch jobs-info-ch))

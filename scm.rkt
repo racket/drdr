@@ -80,37 +80,62 @@
         [else
          (list* (regexp-replace #rx"^ +" l "") (loop))]))))
 
-(define (read-commit branch in-p)
-  (match (read-line in-p)
-    [(? eof-object?)
-     #f]
-    [(regexp #rx"^commit +(.+)$" (list _ hash))
-     (match (read-line in-p)
-       [(regexp #rx"^Merge: +(.+) +(.+)$" (list _ from to))
-        (match-define (regexp #rx"^Author: +(.+)$" (list _ author)) (read-line in-p))
-        (match-define (regexp #rx"^Date: +(.+)$" (list _ date)) (read-line in-p))
-        (define _1 (read-line in-p))
-        (define msg (read-until-empty-line in-p))
-        (make-git-merge* branch hash author date msg from to)]
-       [(regexp #rx"^Author: +(.+)$" (list _ author))
-        (match-define (regexp #rx"^Date: +(.+)$" (list _ date)) (read-line in-p))
-        (define _1 (read-line in-p))
-        (define msg (read-until-empty-line in-p))
-        (define mfiles (read-until-empty-line in-p))
-        (make-git-diff* branch hash author date msg mfiles)])]))
+(define (read-commit branch hash lines)
+  (match lines
+    [(cons (and s (regexp #rx"^Merge: +(.+) +(.+)$" (list _ from to))) lines)
+     (match lines
+       [(cons (regexp #rx"^Author: +(.+)$" (list _ author)) lines)
+        (match lines
+          [(cons (regexp #rx"^Date: +(.+)$" (list _ date)) (cons "" lines))
+           (make-git-merge* branch hash author date
+                            (map (λ (l) (regexp-replace #rx"^ +" l "")) lines)
+                            from to)])])]
+    [(cons (and s (regexp #rx"^Author: +(.+)$" (list _ author))) lines)
+     (match lines
+       [(cons (regexp #rx"^Date: +(.+)$" (list _ date)) (cons "" lines))
+        (define-values (msg mfiles)
+          (splitf-at lines (λ (l) (not (string=? l "")))))
+        (make-git-diff* branch hash author date msg mfiles)]
+       [x
+        (error 'read-commit
+               "Unexpected third line: ~e, state: ~v"
+               x (vector branch hash s))])]
+    [x
+     (error 'read-commit "Unexpected second line: ~e, state: ~v"
+            x (vector branch hash))]))
 
 (define port-empty? port-closed?)
 
 (define (read-commits branch in-p)
-  (cond
-    [(port-empty? in-p)
-     empty]
-    [(read-commit branch in-p)
-     => (lambda (c)
-          (printf "~S\n" c)
-          (list* c (read-commits branch in-p)))]
-    [else
-     empty]))
+  (let loop ([commits-so-far-r empty]
+             [this-commit #f]
+             [commit-lines-r empty])
+    (define (new-commit)
+      (cond
+        [this-commit
+         (define c (read-commit branch this-commit (reverse commit-lines-r)))
+         (printf "~S\n" c)
+         (cons c commits-so-far-r)]
+        [(and (not this-commit) (empty? commit-lines-r))
+         commits-so-far-r]
+        [else
+         (error 'read-commits "Unexpected state")]))
+    (define (done)
+      (reverse (new-commit)))
+    (cond
+      [(port-empty? in-p) (done)]
+      [else
+       (match (read-line in-p)
+         [(? eof-object?) (done)]
+         [(and c (regexp #rx"^commit +(.+)$" (list _ hash)))
+          (printf "~v\n" c)
+          (loop (new-commit)
+                hash
+                empty)]
+         [x
+          (loop commits-so-far-r
+                this-commit
+                (cons x commit-lines-r))])])))
 
 (define (get-scm-commit-msg rev repo)
   (match-define (struct push-data (_ who _ branches)) (push-info rev))
@@ -121,8 +146,8 @@
           (for/list
               ([(branch cs) branches])
             (match-define (vector start-commit end-commit) cs)
-            (parameterize
-                ([current-directory repo])
+            (parameterize ([current-directory repo])
+              (printf "read-commits ~v ~v ~v\n" branch start-commit end-commit)
               (system/output-port
                #:k (curry read-commits branch)
                (git-path)
@@ -191,13 +216,17 @@
   (define start (git-push-start-commit gp))
   (parameterize ([current-directory (plt-repository)])
     (system/output-port
-     #:k (λ (port) (read-line port))
+     #:k (λ (port)
+           (define v (read-line port))
+           (if (eof-object? v)
+             "xxxxxxxxxxxxxxxxxxxxxxxxx"
+             v))
      (git-path)
      "--no-pager" "log" "--format=format:%P" start "-1")))
 (define (git-push-start-commit gp)
   (define cs (git-push-commits gp))
   (if (empty? cs)
-      "xxxxxxxxxxxxxxxxxxxxxxxxx"
+    "xxxxxxxxxxxxxxxxxxxxxxxxx"
       (git-commit-hash* (last cs))))
 (define (git-push-end-commit gp)
   (define cs (git-push-commits gp))

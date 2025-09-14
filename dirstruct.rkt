@@ -31,8 +31,9 @@
   (make-parameter "/usr/bin/make"))
 (define tar-path
   (make-parameter "/bin/tar"))
-(define chmod-path
-  (make-parameter "/bin/chmod"))
+(define bash-path
+  (make-parameter "/bin/bash"))
+
 (define Xvfb-path
   (make-parameter "/usr/bin/Xvfb"))
 
@@ -114,7 +115,7 @@
  [plt-future-build-directory (-> path?)]
  [drdr-directory (parameter/c path-string?)]
  [tar-path (parameter/c (or/c false/c string?))]
- [chmod-path (parameter/c (or/c false/c string?))]
+ [bash-path (parameter/c (or/c false/c string?))]
  [make-path (parameter/c (or/c false/c string?))]
  [Xvfb-path (parameter/c (or/c false/c string?))]
  [vncviewer-path (parameter/c (or/c false/c string?))] 

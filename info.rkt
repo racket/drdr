@@ -17,7 +17,7 @@
     "net-lib"
     "web-server-lib"
     "web-server-test"
-    "job-queue"))
+    "job-queue-lib"))
 (define build-deps
   '("at-exp-lib"
     "scheme-lib"

@@ -50,15 +50,7 @@
       #:env (current-env)
       (build-path log-dir "pkg-src" "build" "make")
       (make-path)
-      (list "-j" (number->string (number-of-cpus))))))
-  #;
-  (parameterize ([current-directory co-dir])
-    (run/collect/wait/log
-     #:timeout (current-make-install-timeout-seconds)
-     #:env (current-env)
-     (build-path log-dir "pkg-src" "build" "read-only")
-     (chmod-path)
-     (list "-R" "a=rX" "racket")))
+      (list "-j" (number->string (number-of-cpus)) "both"))))
   (run/collect/wait/log
    #:timeout (current-make-install-timeout-seconds)
    #:env (current-env)
@@ -69,18 +61,23 @@
          "-C" (path->string rev-dir)
          "trunk")))
 
-(define (call-with-temporary-directory thunk)
-  (define tempdir (symbol->string (gensym 'tmpdir)))
+(define (delete-directory/files-unless-core d)
+  (unless
+      #f ;; XXX Disabled for a while
+      #;(file-exists? (build-path d "core"))
+    (delete-directory/files d)))
+(define (call-with-temporary-directory n thunk)
+  (define nd (build-path (current-directory) n))
   (dynamic-wind
       (lambda ()
-        (make-directory* tempdir))
+        (make-directory* nd))
       (lambda ()
-        (parameterize ([current-directory tempdir])
+        (parameterize ([current-directory nd])
           (thunk)))
       (lambda ()
-        (delete-directory/files tempdir))))
-(define-syntax-rule (with-temporary-directory e)
-  (call-with-temporary-directory (lambda () e)))
+        (delete-directory/files-unless-core nd))))
+(define-syntax-rule (with-temporary-directory n . e)
+  (call-with-temporary-directory n (lambda () . e)))
 
 (define-syntax-rule
   (define-with-temporary-planet-directory with-temporary-planet-directory env-str)
@@ -97,8 +94,8 @@
                       (thunk)))
           (lambda ()
             (delete-directory/files tempdir))))
-    (define-syntax-rule (with-temporary-planet-directory e)
-      (call-with-temporary-planet-directory (lambda () e)))))
+    (define-syntax-rule (with-temporary-planet-directory . e)
+      (call-with-temporary-planet-directory (lambda () . e)))))
 (define-with-temporary-planet-directory with-temporary-planet-directory "PLTPLANETDIR")
 (define-with-temporary-planet-directory with-temporary-tmp-directory "TMPDIR")
 
@@ -115,16 +112,16 @@
                            (notify! "Failed while copying HOME: ~a"
                                     (exn-message x)))])
           (delete-directory/files new-dir)
-          (copy-directory/files
-           (hash-ref (current-env) "HOME")
-           new-dir)))
+          (define from (hash-ref (current-env) "HOME"))
+          (delete-directory/files (build-path from ".cache") #:must-exist? #f)
+          (copy-directory/files from new-dir)))
       (lambda ()
         (with-env (["HOME" (path->string new-dir)])
                   (thunk)))
       (lambda ()
         (delete-directory/files new-dir))))
-(define-syntax-rule (with-temporary-home-directory e)
-  (call-with-temporary-home-directory (lambda () e)))
+(define-syntax-rule (with-temporary-home-directory . e)
+  (call-with-temporary-home-directory (lambda () . e)))
 
 (define (with-running-program command args thunk)
   (if command
@@ -173,31 +170,40 @@
     (thunk)))
 
 (define-runtime-path pkgs-file "pkgs.rktd")
-
 (define (tested-packages)
   (define val (file->value pkgs-file))
   val)
 
+(define (log-pth->dir-name lp)
+  (regexp-replace* #rx"/" (path->string lp) "_"))
+
 (define (test-revision rev)
   (define rev-dir (revision-dir rev))
-  (define trunk-dir
-    (revision-trunk-dir rev))
-  (define log-dir
-    (revision-log-dir rev))
-  (define trunk->log
-    (rebase-path trunk-dir log-dir))
+  (define trunk-dir (revision-trunk-dir rev))
+  (define log-dir (revision-log-dir rev))
+  (define trunk->log (rebase-path trunk-dir log-dir))
+  (define trunk->log+cs
+    (rebase-path trunk-dir (build-path log-dir "cs")))
+  (define (trunk->log/cs p cs?)
+    ((if cs? trunk->log+cs trunk->log) p))
   (define racket-path
     (path->string (build-path trunk-dir "racket" "bin" "racket")))
-  (define raco-path
-    (path->string (build-path trunk-dir "racket" "bin" "raco")))
+  (define (raco-path cs?)
+    (define (make-path suffix)
+      (path->string (build-path trunk-dir "racket" "bin" (string-append "raco" suffix))))
+    (define suffixed-p (make-path (if cs? "cs" "bc")))
+    (if (file-exists? suffixed-p)
+        suffixed-p
+        ;; Assume that the requested variant is the default one
+        (make-path "")))
   (define test-workers (make-job-queue (number-of-cpus)))
 
   (define pkgs-pths
     (list (build-path trunk-dir "racket" "collects")
           (build-path trunk-dir "pkgs")
           (build-path trunk-dir "racket" "share" "pkgs")))
-  (define (test-directory dir-pth upper-sema)
-    (define dir-log (build-path (trunk->log dir-pth) ".index.test"))
+  (define (test-directory cs? dir-pth upper-sema)
+    (define dir-log (build-path (trunk->log/cs dir-pth cs?) ".index.test"))
     (cond
       [(read-cache* dir-log)
        (semaphore-post upper-sema)]
@@ -212,84 +218,92 @@
                          0
                          1))
                #:cache-keys? #t))
+       (thread
+        (lambda ()
+          (define how-many (length files))
+          (notify! "Dir ~a waiting for ~a jobs" dir-pth how-many)
+          (semaphore-wait* dir-sema how-many)
+          (notify! "Done with dir: ~a" dir-pth)
+          (write-cache! dir-log (current-seconds))
+          (semaphore-post upper-sema)))
        (for ([sub-pth (in-list files)])
          (define pth (build-path dir-pth sub-pth))
-         (define directory? (directory-exists? pth))
          (cond
-           [directory?
-            (test-directory pth dir-sema)]
+           [(directory-exists? pth)
+            (test-directory cs? pth dir-sema)]
            [else
-            (define log-pth (trunk->log pth))
+            (define log-pth (trunk->log/cs pth cs?))
             (cond
               [(file-exists? log-pth)
                (semaphore-post dir-sema)]
               [else
-               (define pth-timeout
-                 (current-subprocess-timeout-seconds))
-               (define pth-cmd/general
-                 (path-command-line pth pth-timeout))
-               (define-values
-                 (pth-cmd the-queue)
-                 (match pth-cmd/general
+               (define pth-cmd
+                 (match (path-command-line pth (current-subprocess-timeout-seconds))
                    [(list-rest 'raco rst)
-                    (values
-                     (lambda (k) (k (list* raco-path rst)))
-                     test-workers)]))
+                    (lambda (cs? k)
+                      (k (list* (raco-path cs?) rst)))]))
                (cond
                  [pth-cmd
+                  (define cmd (pth-cmd cs? (λ (x) x)))
+                  (define lab (vector cmd (current-seconds) #f 'submit))
                   (submit-job!
-                   the-queue
-                   (pth-cmd (λ (x) x))
+                   test-workers lab
                    (lambda ()
+                     (define (status! v) (vector-set! lab 3 v))
+                     (status! 'start)
+                     (vector-set! lab 2 (current-seconds))
+                     (notify! "job start: ~v" lab)
                      (dynamic-wind
                          void
                          (λ ()
-                           (pth-cmd
-                            (λ (l)
-                              (with-env
-                               (["DISPLAY"
-                                 (format ":~a"
-                                         (cpu->child
+                            (with-env
+                              (["DISPLAY"
+                                (format ":~a"
+                                        (cpu->child
                                           (current-worker)))])
-                               (with-temporary-tmp-directory
+                              (status! 'env)
+                              (with-temporary-tmp-directory
+                                (status! 'tmp)
                                 (with-temporary-planet-directory
-                                 (with-temporary-home-directory
-                                  (with-temporary-directory
-                                   (run/collect/wait/log
-                                    log-pth
-                                    #:timeout (current-make-install-timeout-seconds)
-                                    #:env (current-env)
-                                    (first l)
-                                    (rest l))))))))))
+                                  (status! 'planet)
+                                  (with-temporary-home-directory
+                                    (status! 'home)
+                                    (with-temporary-directory
+                                      (log-pth->dir-name log-pth)
+                                      (status! 'tmp2)
+                                      (run/collect/wait/log
+                                        log-pth
+                                        #:timeout (current-make-install-timeout-seconds)
+                                        #:env (current-env)
+                                        (first cmd)
+                                        (rest cmd))))))))
                          (λ ()
                            (semaphore-post dir-sema)))))]
                  [else
-                  (semaphore-post dir-sema)])])]))
-       (thread
-        (lambda ()
-          (define how-many (length files))
-          (semaphore-wait* dir-sema how-many)
-          (notify! "Done with dir: ~a" dir-pth)
-          (write-cache! dir-log (current-seconds))
-          (semaphore-post upper-sema)))]))
+                  (semaphore-post dir-sema)])])]))]))
   ;; Some setup
-  (for ([pp (in-list (tested-packages))])
-    (define (run name source)
-      (run/collect/wait/log
-       #:timeout (current-make-install-timeout-seconds)
-       #:env (current-env)
-       (build-path log-dir "pkg" name)
-       raco-path
-       (list "pkg" "install" "--skip-installed" "-i" "--deps" "fail" "--name" name source)))
-    (match pp
-      [`(,name ,source) (run name source)]
-      [(? string? name) (run name name)]))
-  (run/collect/wait/log
-   #:timeout (current-subprocess-timeout-seconds)
-   #:env (current-env)
-   (build-path log-dir "pkg-show")
-   raco-path
-   (list "pkg" "show" "-al" "--full-checksum"))
+  (for ([cs? (in-list '(#f #t))])
+    (define this-base
+      (if cs?
+        (build-path log-dir "cs")
+        log-dir))
+    (for ([pp (in-list (tested-packages))])
+      (define (run name source)
+        (run/collect/wait/log
+         #:timeout (current-make-install-timeout-seconds)
+         #:env (current-env)
+         (build-path this-base "pkg" name)
+         (raco-path cs?)
+         (list "pkg" "install" "--no-cache" "--skip-installed" "-i" "--deps" "fail" "--name" name source)))
+      (match pp
+        [`(,name ,source) (run name source)]
+        [(? string? name) (run name name)]))
+    (run/collect/wait/log
+     #:timeout (current-subprocess-timeout-seconds)
+     #:env (current-env)
+     (build-path this-base "pkg-show")
+     (raco-path cs?)
+     (list "pkg" "show" "-al" "--full-checksum")))
   (run/collect/wait/log
    #:timeout (current-subprocess-timeout-seconds)
    #:env (current-env)
@@ -301,43 +315,51 @@
   ;; And go
   (define (test-directories ps upper-sema)
     (define list-sema (make-semaphore 0))
-    (define how-many 
+    (define how-many
       (for/sum ([p (in-list ps)] #:when (directory-exists? p))
-        (test-directory p list-sema)
+        (for ([cs? (in-list '(#f #t))])
+          (test-directory cs? p list-sema))
         1))
-    (and (not (zero? how-many))
-         (thread
-          (lambda ()
-            (semaphore-wait* list-sema how-many)
-            (semaphore-post upper-sema)))))
+    (thread
+      (lambda ()
+        (semaphore-wait* list-sema (* 2 how-many))
+        (semaphore-post upper-sema))))
 
   (define top-sema (make-semaphore 0))
-  (notify! "Starting testing")
-  (when (test-directories pkgs-pths top-sema)
-    (notify! "All testing scheduled... waiting for completion")
+  (notify! "Starting testing with")
+  (thread (lambda ()
+    (test-directories pkgs-pths top-sema)
+    (notify! "All testing scheduled... waiting for completion")))
+
+  (define the-start (current-inexact-milliseconds))
+  (let loop ()
+    (define-values (queued-js active-js) (job-queue-jobs test-workers))
+    (notify! "Testing still in progress. [~a queued jobs] [~a active jobs]"
+             (length queued-js) (length active-js))
+    (define (show-jobs l js)
+      (for ([j (in-list js)])
+        (match-define (vector jl s e st) j)
+        (notify! "\t~a: ~a/~a ~v" l st (and e (- e s)) jl)))
+    (show-jobs "Q" queued-js)
+    (show-jobs "A" active-js)
+    (define how-many (+ (length queued-js) (length active-js)))
     (define the-deadline
-      (+ (current-inexact-milliseconds)
-         (* 1000 (* 2 (current-make-install-timeout-seconds)))))
+      (+ the-start (* 1000 (current-make-install-timeout-seconds))))
     (define the-deadline-evt
       (handle-evt
-       (alarm-evt the-deadline)
-       (λ _
-         (kill-thread (current-thread)))))
-    (let loop ()
-      (sync top-sema
-            the-deadline-evt
-            (handle-evt
-             (alarm-evt (+ (current-inexact-milliseconds)
-                           (* 1000 60)))
-             (λ _
-               (define-values (queued-js active-js) (job-queue-jobs test-workers))
-               (notify! "Testing still in progress. [~a queued jobs ~e] [~a active jobs ~e]"
-                        (length queued-js) queued-js
-                        (length active-js) active-js)
-               (notify! "Testing has until ~a (~a) to finish"
-                        the-deadline
-                        (seconds->string (/ the-deadline 1000)))
-               (loop))))))
+        (alarm-evt the-deadline)
+        (λ _
+           (notify! "Deadline reached"))))
+    (notify! "Testing has until ~a (~a) to finish"
+             the-deadline
+             (seconds->string (/ the-deadline 1000)))
+    (sync top-sema
+          the-deadline-evt
+          (handle-evt
+            (alarm-evt (+ (current-inexact-milliseconds)
+                          (* 1000 60)))
+            (λ _ (loop)))))
+
   (notify! "Stopping testing")
   (stop-job-queue! test-workers))
 
@@ -389,7 +411,6 @@
                     [current-temporary-directory tmp-dir]
                     [current-rev rev])
        (with-env (["PLTSTDERR" "error"]
-                  ["GIT_DIR" (path->string (plt-repository))]
                   ["TMPDIR" (path->string tmp-dir)]
                   ["PLTDRDR" "yes"]
                   ["PATH"
@@ -430,7 +451,10 @@
                     (notify! "Starting test of rev ~a" rev)
                     (test-revision rev)))))
      ;; Remove the test directory
-     (safely-delete-directory test-dir))))
+     (safely-delete-directory home-dir)
+     (safely-delete-directory tmp-dir)
+     (safely-delete-directory lock-dir)
+     (safely-delete-directory planet-dir))))
 
 (provide/contract
  [integrate-revision (exact-nonnegative-integer? . -> . void)])
