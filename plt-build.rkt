@@ -166,7 +166,9 @@
             ;; Kill the process
             (subprocess-kill the-process #f)
             (sleep)
-            (subprocess-kill the-process #t))))
+            (subprocess-kill the-process #t)
+            (with-handlers ([exn:fail? (lambda (e) (void))])
+              (subprocess-wait the-process)))))
     (thunk)))
 
 (define-runtime-path pkgs-file "pkgs.rktd")
