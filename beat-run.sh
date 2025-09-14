@@ -5,7 +5,7 @@ R="$PLTROOT/bin/racket"
 PCENT=$(df --output=pcent / | tail -1 | awk -F% '{print $1}')
 IPCENT=$(df --output=ipcent / | tail -1 | awk -F% '{print $1}')
 
-if [ $PCENT -lt 90 ] && [ $IPCENT -lt 90 ] ; then
+if [ $PCENT -lt 94 ] && [ $IPCENT -lt 90 ] ; then
     $R -l- plt-service-monitor/beat heartbeat.racket-lang.org drdr-disk
 fi
 

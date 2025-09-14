@@ -1122,8 +1122,8 @@ in.}
 (define (log-dispatch req)
   (define user-agent
     (cond
-      [(headers-assq #"User-Agent"
-                     (request-headers/raw req))
+      [(headers-assq* #"User-Agent"
+                      (request-headers/raw req))
        => header-value]
       [else
        #"Unknown"]))
@@ -1131,9 +1131,10 @@ in.}
     [(regexp-match #"Googlebot" user-agent)
      (response/xexpr "Please, do not index.")]
     [else
-     (printf "~a - ~a\n"
+     (printf "~a - ~a ~a\n"
              (url->string (request-uri req))
-             user-agent)
+             user-agent
+	     (request-client-ip req))
      (parameterize ([drdr-start-request (current-inexact-milliseconds)])
      (top-dispatch req))]))
 

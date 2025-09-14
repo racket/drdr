@@ -16,7 +16,7 @@
 (current-make-timeout-seconds (* 5 60 60))                                       
 (current-subprocess-timeout-seconds 90)
 (current-monitoring-interval-seconds 60)
-(number-of-cpus 12)
+(number-of-cpus 18)
 (putenv "PLT_DISPLAY_BACKING_SCALE" "1.0")
 
 (define (string->number* s)

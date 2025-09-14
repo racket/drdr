@@ -113,6 +113,7 @@
                                     (exn-message x)))])
           (delete-directory/files new-dir)
           (define from (hash-ref (current-env) "HOME"))
+          (delete-directory/files (build-path from ".cache") #:must-exist? #f)
           (copy-directory/files from new-dir)))
       (lambda ()
         (with-env (["HOME" (path->string new-dir)])
@@ -343,12 +344,12 @@
     (show-jobs "A" active-js)
     (define how-many (+ (length queued-js) (length active-js)))
     (define the-deadline
-      (+ the-start (current-make-install-timeout-seconds)))
+      (+ the-start (* 1000 (current-make-install-timeout-seconds))))
     (define the-deadline-evt
       (handle-evt
         (alarm-evt the-deadline)
         (λ _
-           (kill-thread (current-thread)))))
+           (notify! "Deadline reached"))))
     (notify! "Testing has until ~a (~a) to finish"
              the-deadline
              (seconds->string (/ the-deadline 1000)))
