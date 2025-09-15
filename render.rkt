@@ -467,7 +467,7 @@
                                  (td ,(timestamp end)))
                              (tr (td "Duration:")
                                  (td ,(format-duration-ms dur)
-                                     nbsp (a ([href ,(format "/data~a" (path-add-suffix the-base-path #".timing"))])
+                                     nbsp (a ([href ,(format "/json/timing~a" the-base-path)])
                                              "(timing data)")))
                              (tr (td "Timeout:") (td ,(if (timeout? log) checkmark-entity "")))
                              (tr (td "Exit Code:") (td ,(if (exit? log) (number->string (exit-code log)) "")))
