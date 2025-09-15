@@ -175,7 +175,7 @@ function get_data(_path) {
     if (_path[0] != '/')
         _path = '/' + _path;
     path = _path;
-    $.ajax({url: 'http://drdr.racket-lang.org/json/timing'+path,
+    $.ajax({url: '/json/timing'+path,
             beforeSend: function(xhr) {
                 xhr.overrideMimeType( 'text/plain; charset=x-user-defined' );
             },
