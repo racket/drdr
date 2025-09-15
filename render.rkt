@@ -122,10 +122,38 @@
 (define (looks-like-directory? pth)
   (and (regexp-match #rx"/$" pth) #t))
 
+(define (make-timestamp-span utc-display-text timestamp-seconds)
+  `(span ([class "timestamp"]
+          [data-timestamp ,(number->string timestamp-seconds)]
+          [title ,(format "UTC: ~a" utc-display-text)])
+         ,utc-display-text))
+
 (define (svn-date->nice-date date)
-  (regexp-replace "^(....-..-..)T(..:..:..).*Z$" date "\\1 \\2"))
+  (define nice-date (regexp-replace "^(....-..-..)T(..:..:..).*Z$" date "\\1 \\2"))
+  (with-handlers ([exn:fail? (lambda (x) nice-date)])
+    (match (regexp-match #rx"^(....)-(..)-(..)-T(..):(..):(..).*Z$" date)
+      [(list _ year month day hour minute second)
+       (define timestamp (find-seconds (string->number second)
+                                     (string->number minute)
+                                     (string->number hour)
+                                     (string->number day)
+                                     (string->number month)
+                                     (string->number year)))
+       (make-timestamp-span nice-date timestamp)]
+      [else nice-date])))
 (define (git-date->nice-date date)
-  (regexp-replace "^(....-..-..) (..:..:..).*$" date "\\1 \\2"))
+  (define nice-date (regexp-replace "^(....-..-..) (..:..:..).*$" date "\\1 \\2"))
+  (with-handlers ([exn:fail? (lambda (x) nice-date)])
+    (match (regexp-match #rx"^(....)-(..)-(..)-(..):(..):(..).*$" date)
+      [(list _ year month day hour minute second)
+       (define timestamp (find-seconds (string->number second)
+                                     (string->number minute)
+                                     (string->number hour)
+                                     (string->number day)
+                                     (string->number month)
+                                     (string->number year)))
+       (make-timestamp-span nice-date timestamp)]
+      [else nice-date])))
 (define (log->url log)
   (define start-commit (git-push-start-commit log))
   (define end-commit (git-push-end-commit log))
@@ -138,10 +166,10 @@
   (define pth (revision-commit-msg (current-rev)))
   (define (timestamp pth)
     (with-handlers ([exn:fail? (lambda (x) "")])
-      (date->string 
-       (seconds->date 
-        (read-cache
-         (build-path (revision-dir (current-rev)) pth))) #t)))
+      (define secs (read-cache
+                    (build-path (revision-dir (current-rev)) pth)))
+      (define utc-time-str (date->string (seconds->date secs) #t))
+      (make-timestamp-span utc-time-str secs)))
   (define bdate/s (timestamp "checkout-done"))
   (define bdate/e (timestamp "integrated"))
   (match (read-cache* pth)
@@ -306,7 +334,10 @@
         (a ([href "/help"])
            "Need help?")
         (br)
-        "Current time: " ,(date->string (seconds->date (current-seconds)) #t)
+        "Current time: "
+        ,(let ([curr-secs (current-seconds)])
+           (define utc-time-str (date->string (seconds->date curr-secs) #t))
+           (make-timestamp-span utc-time-str curr-secs))
         "Render time: "
         ,(real->decimal-string
           (- (current-inexact-milliseconds) (drdr-start-request)))
@@ -383,12 +414,13 @@
         (define (timestamp msecs)
           (define secs (/ msecs 1000))
           (with-handlers ([exn:fail? (lambda (x) "")])
-            (format "~a.~a"
-                    (date->string (seconds->date secs) #t)
-                    (substring
-                     (number->string
-                      (/ (- msecs (* 1000 (floor secs))) 1000))
-                     2))))
+            (define utc-time-str (format "~a.~a"
+                                       (date->string (seconds->date secs) #t)
+                                       (substring
+                                        (number->string
+                                         (/ (- msecs (* 1000 (floor secs))) 1000))
+                                        2)))
+            (make-timestamp-span utc-time-str (inexact->exact (floor secs)))))
         (response/xexpr
          `(html 
            (head (title ,title)
@@ -398,6 +430,22 @@
                           [src "/jquery.flot.js"]) "")
                  (script ([language "javascript"] [type "text/javascript"]
                           [src "/jquery.flot.selection.js"]) "")
+                 (script ([language "javascript"] [type "text/javascript"])
+                         "
+                         $(document).ready(function() {
+                           $('.timestamp').each(function() {
+                             var $span = $(this);
+                             var timestamp = parseInt($span.attr('data-timestamp'));
+                             if (!isNaN(timestamp)) {
+                               var utcTime = $span.text();
+                               var localDate = new Date(timestamp * 1000);
+                               var localTime = localDate.toLocaleString();
+                               $span.text(localTime);
+                               $span.attr('title', 'UTC: ' + utcTime);
+                             }
+                           });
+                         });
+                         ")
                  (link ([rel "stylesheet"] [type "text/css"] [href "/render.css"])))
                 (body 
                  (div ([class "log, content"])
