@@ -443,7 +443,7 @@
                         (fluxbox-path)
                         (list "-d" (format ":~a" i)
                               "--sm-disable"
-                              "--no-composite")
+                              "--compositor=off")
                         inner)))))
 
                  (start-x-server
