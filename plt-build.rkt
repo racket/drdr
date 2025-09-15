@@ -422,7 +422,9 @@
                            (getenv "PATH"))]
                   ["PLTLOCKDIR" (path->string lock-dir)]
                   ["PLTPLANETDIR" (path->string planet-dir)]
-                  ["HOME" (path->string home-dir)])
+                  ["HOME" (path->string home-dir)]
+                  ["MESA_LOADER_IGNORE_DRIVERS" "mgag200"]
+                  ["LIBGL_ALWAYS_SOFTWARE" "1"])
                  (unless (read-cache* (revision-commit-msg rev))
                    (write-cache! (revision-commit-msg rev)
                                  (get-scm-commit-msg rev (plt-repository))))
