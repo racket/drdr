@@ -10,7 +10,7 @@ cd "$DRDR"
 
 kill_all() {
   cat "$LOGS/"*.pid > /tmp/leave-pids-$$
-  KILL=`pgrep '^(Xorg|Xnest|Xvfb|Xvnc|fluxbox|racket|raco|dbus-daemon|gracket(-text)?)$' | grep -w -v -f /tmp/leave-pids-$$`
+  KILL=`pgrep '^(Xorg|Xnest|Xvfb|Xvnc|fluxbox|racket|racketbc|raco|racobc|dbus-daemon|gracket(-text)?)$' | grep -w -v -f /tmp/leave-pids-$$`
   rm /tmp/leave-pids-$$
   echo killing $KILL
   kill -15 $KILL
@@ -29,7 +29,7 @@ run_loop () { # <basename> <kill?>
     echo "$1: setting core dump"
     ulimit -c 100000
     echo "$1: compiling"
-    "$PLTROOT/bin/raco" make "$1.rkt"
+    "$PLTROOT/bin/raco" make *.rkt */*.rkt
     echo "$1: running"
     "$R" -t "$1.rkt" 2>&1 &
     echo "$!" > "$LOGS/$1.pid"
@@ -45,5 +45,5 @@ run_loop () { # <basename> <kill?>
 
 exec
 
-run_loop render &
+run_loop render > "$LOGS/render.log" 2>&1 &
 run_loop main yes 2>&1 | tee "$LOGS/main.log"
