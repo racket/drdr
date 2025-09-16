@@ -35,4 +35,4 @@ is licensed under the [Apache 2.0] license and the [MIT] license.
 [issue]: https://github.com/racket/drdr/issues
 [development mailing list]: https://lists.racket-lang.org
 [LICENSE]: LICENSE
-[help page] : https://drdr.racket-lang.org/help
+[help page]: https://drdr.racket-lang.org/help
