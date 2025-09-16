@@ -16,9 +16,9 @@ See also the [help page] associated with the tool.
 
 ### Contributing
 
-Contribute to Racket by submitting a [pull request], reporting an
-[issue], joining the [development mailing list], or visiting the
-IRC or Slack channels.
+Racket is a community developed open source project and we welcome new 
+contributors. See [racket/README.md][contributing] to learn how you 
+can be a part of this amazing project.
 
 ### License
 
@@ -36,3 +36,4 @@ is licensed under the [Apache 2.0] license and the [MIT] license.
 [development mailing list]: https://lists.racket-lang.org
 [LICENSE]: LICENSE
 [help page]: https://drdr.racket-lang.org/help
+[contributing]: https://github.com/racket/racket/blob/master/README.md#contributing
