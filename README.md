@@ -1,7 +1,9 @@
 # drdr
 
 
-This the source for the Racket package: "drdr", which runs [drdr].
+This the source for the Racket package: "drdr", which runs [drdr] a continuous
+integration testing system that attempts to alert developers to regressions
+that may occur as a result of updates to Racket and its attendant packages.
 
 It currently only runs on a single machine that is set up in an intricate way.
 -- In particular, config.rkt mentions many of those details
@@ -10,6 +12,7 @@ It currently only runs on a single machine that is set up in an intricate way.
 It uses a few of my (Jay McCarthy) PLaneT packages and some other ones
 as well.
 
+See also the [help page] associated with the tool.
 
 ### Contributing
 
@@ -32,3 +35,4 @@ is licensed under the [Apache 2.0] license and the [MIT] license.
 [issue]: https://github.com/racket/drdr/issues
 [development mailing list]: https://lists.racket-lang.org
 [LICENSE]: LICENSE
+[help page] : https://drdr.racket-lang.org/help
