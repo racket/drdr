@@ -16,7 +16,7 @@ See also the [help page] associated with the tool.
 
 ### Contributing
 
-Racket is a community developed open source project and we welcome new 
+Racket is a community-developed open source project and we welcome new 
 contributors. See [racket/README.md][contributing] to learn how you 
 can be a part of this amazing project.
 
