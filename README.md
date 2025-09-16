@@ -1,7 +1,7 @@
 # drdr
 
 
-This the source for the Racket package: "drdr", which runs [drdr] a continuous
+This the source for the Racket package [drdr], a continuous
 integration testing system that attempts to alert developers to regressions
 that may occur as a result of updates to Racket and its attendant packages.
 
