@@ -751,7 +751,48 @@ in.}
                                    
                                    @h1{May these settings be set on a per-directory basis?}
                                    @p{Yes, if the property is set on any ancestor directory, then its value is used for its descendents when theirs is not set.}
-                                   
+
+                                   @h1{What properties does DrDr recognize?}
+                                   @p{DrDr reads properties that @code{raco test} prints to standard output. These fall into two categories: properties DrDr uses for reporting, and properties @code{raco test} uses to control execution.}
+
+                                   @h2{Reporting properties}
+                                   @p{These are read by DrDr from @code{raco test} output and affect how results are analyzed and reported:}
+                                   @ul{
+                                     @li{@code{test-responsible} — who to notify on failure.}
+                                     @li{@code{test-random} — marks non-deterministic output. When set to @code{#t}, changes in output are not reported.}
+                                     @li{@code{test-known-error} — marks known failures. When set to @code{#t}, changes are not reported.}
+                                   }
+
+                                   @h2{Execution properties}
+                                   @p{These are handled by @code{raco test} itself and affect how tests are run:}
+                                   @ul{
+                                     @li{@code{lock-name} — serializes tests sharing the same lock name using file-based locking. Useful for tests that need exclusive access to a shared resource (see below).}
+                                     @li{@code{timeout} — per-test timeout override in seconds.}
+                                     @li{@code{ignore-stderr} — a regular expression pattern; matching stderr lines are ignored.}
+                                   }
+
+                                   @h2{How to set properties}
+                                   @p{Properties can be set in two ways:}
+                                   @p{@b{Via @code{info.rkt}:} Use the plural/keyed form in the package's @code{info.rkt}. Each entry maps a path to a value.}
+                                   @pre{
+(define test-responsibles '((#f "someone@")))
+(define test-lock-names '(("gui-test.rkt" "x-server")))
+(define test-timeouts '(("slow-test.rkt" 600)))
+(define test-ignore-stderrs '(("noisy.rkt" "GLib-WARNING")))
+}
+                                   @p{@b{Via @code{config} submodule:} Add a @code{config} submodule inside the test file's @code{test} submodule.}
+                                   @pre{
+(module test racket/base
+  (module config info
+    (define responsible "someone@")
+    (define lock-name "x-server")
+    (define timeout 600)
+    (define random? #t)))
+}
+
+                                   @h2{X server serialization}
+                                   @p{All DrDr workers share a single X server (display @code{:20}). Tests that need exclusive X server access can use the @code{lock-name} property with a conventional name like @code{"x-server"}. This causes @code{raco test} to serialize those tests via file locking, preventing concurrent X server access conflicts. No DrDr-side changes are needed.}
+
                                    @h1{What data is gathered during these runs?}
                                    @p{When each file is run the following is recorded: the start time, the command-line, the STDERR and STDOUT output, the exit code (unless there is a timeout), and the end time. All this information is presented in the per-file DrDr report page.}
                                    
