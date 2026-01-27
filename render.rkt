@@ -1229,13 +1229,71 @@ in.}
      (parameterize ([drdr-start-request (current-inexact-milliseconds)])
      (top-dispatch req))]))
 
-(date-display-format 'iso-8601)
-(cache/file-mode 'no-cache)
-(serve/servlet log-dispatch
-               #:port 9000
-               #:listen-ip #f
-               #:quit? #f
-               #:launch-browser? #f
-               #:servlet-regexp #rx""
-               #:servlet-path "/"
-               #:extra-files-paths (list static))
+(module+ main
+  (date-display-format 'iso-8601)
+  (cache/file-mode 'no-cache)
+  (serve/servlet log-dispatch
+                 #:port 9000
+                 #:listen-ip #f
+                 #:quit? #f
+                 #:launch-browser? #f
+                 #:servlet-regexp #rx""
+                 #:servlet-path "/"
+                 #:extra-files-paths (list static)))
+
+(module+ test
+  (require rackunit)
+
+  ;; Test the make-timestamp-span helper function
+  (check-equal? (make-timestamp-span "2023-12-25 10:30:45" 1703505045)
+                '(span ([class "timestamp"]
+                        [data-timestamp "1703505045"]
+                        [title "UTC: 2023-12-25 10:30:45"])
+                       "2023-12-25 10:30:45"))
+
+  ;; Test SVN regex pattern works correctly
+  (check-equal? (regexp-match #rx"^(....)-(..)-(..T)(..):(..):(..).*Z$" "2023-12-25T10:30:45.123456Z")
+                '("2023-12-25T10:30:45.123456Z" "2023" "12" "25T" "10" "30" "45"))
+
+  ;; Test svn-date->nice-date function generates proper spans
+  (let ([result (svn-date->nice-date "2023-12-25T10:30:45.123456Z")])
+    (check-true (list? result))
+    (check-eq? (car result) 'span)
+    (check-true (and (member '(class "timestamp") (cadr result)) #t))
+    (check-true (and (member '(title "UTC: 2023-12-25 10:30:45") (cadr result)) #t))
+    (check-equal? (caddr result) "2023-12-25 10:30:45"))
+
+  ;; Test svn-date->nice-date with malformed date (should fallback)
+  (check-equal? (svn-date->nice-date "invalid-date") "invalid-date")
+
+  ;; Test git regex pattern with correct space separator
+  (check-equal? (regexp-match #rx"^([0-9][0-9][0-9][0-9])-([0-9][0-9])-([0-9][0-9]) ([0-9][0-9]):([0-9][0-9]):([0-9][0-9]).*$" "2023-12-25 10:30:45 +0000")
+                '("2023-12-25 10:30:45 +0000" "2023" "12" "25" "10" "30" "45"))
+
+  ;; Test git-date->nice-date function generates proper spans
+  (let ([result (git-date->nice-date "2023-12-25 10:30:45 +0000")])
+    (check-true (list? result))
+    (check-eq? (car result) 'span)
+    (check-true (and (member '(class "timestamp") (cadr result)) #t))
+    (check-true (and (member '(title "UTC: 2023-12-25 10:30:45") (cadr result)) #t))
+    (check-equal? (caddr result) "2023-12-25 10:30:45"))
+
+  ;; Test git-date->nice-date with malformed date (should fallback)
+  (check-equal? (git-date->nice-date "invalid-date") "invalid-date")
+
+  ;; Test that timestamp spans have correct structure
+  (check-true (match (make-timestamp-span "test-time" 123456)
+                [`(span ([class "timestamp"]
+                         [data-timestamp "123456"]
+                         [title "UTC: test-time"])
+                        "test-time")
+                 #t]
+                [_ #f]))
+
+  ;; Test that generated spans contain all required attributes
+  (let ([span (make-timestamp-span "2023-01-01 00:00:00" 1672531200)])
+    (check-equal? (car span) 'span)
+    (check-true (and (member '(class "timestamp") (cadr span)) #t))
+    (check-true (and (member '(data-timestamp "1672531200") (cadr span)) #t))
+    (check-true (and (member '(title "UTC: 2023-01-01 00:00:00") (cadr span)) #t))
+    (check-equal? (caddr span) "2023-01-01 00:00:00")))
