@@ -1,8 +1,8 @@
 #lang racket
-(require "../run-collect.rkt" 
+(require "../run-collect.rkt"
          "../status.rkt"
          racket/runtime-path
-         tests/eli-tester)
+         rackunit)
 
 (define-runtime-path loud-file "loud.rkt")
 
@@ -14,19 +14,18 @@
                           "--" (number->string n))))
 
 (define (test-run-loud n)
-  (test
-   #:failure-prefix (number->string n)
-   (apply set (status-output-log (run-loud n)))
-   =>
-   (for/set ([i (in-range n)])
-     ((if (even? i)
-          make-stderr
-          make-stdout)
-      (string->bytes/utf-8
-       (number->string i))))))
+  (check-equal? (apply set (status-output-log (run-loud n)))
+                (for/set ([i (in-range n)])
+                  ((if (even? i)
+                       make-stderr
+                       make-stdout)
+                   (string->bytes/utf-8
+                    (number->string i))))
+                (format "Test failed for n=~a" n)))
 
-(test
- (for ([n (in-range 10)])
-   (test-run-loud n)))
+;; Run tests for different values of n
+(for ([n (in-range 10)])
+  (test-run-loud n))
 
+;; Also run the function once for demonstration
 (run-loud 10)

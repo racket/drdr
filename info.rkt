@@ -13,7 +13,7 @@
 (define test-responsibles '((all jay)))
 (define deps
   '("base"
-    "eli-tester"
+    "rackunit-lib"
     "net-lib"
     "web-server-lib"
     "web-server-test"
