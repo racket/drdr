@@ -357,7 +357,8 @@
    #:env (current-env)
    (build-path log-dir "pkg-src" "build" "set-browser.rkt")
    racket-path
-   (list "-t"
+   (list "-y" 
+	 "-t"
          (path->string*
           (build-path (drdr-directory) "set-browser.rkt"))))
   ;; And go
