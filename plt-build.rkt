@@ -492,7 +492,7 @@
                         (fluxbox-path)
                         (list "-d" (format ":~a" i)
                               "--sm-disable"
-                              "--compositor=off")
+                              "--compositor=none")
                         inner)))))
 
                  (start-x-server
