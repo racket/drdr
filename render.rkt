@@ -795,6 +795,13 @@ in.}
                                    @h2{X server serialization}
                                    @p{All DrDr workers share a single X server (display @code{:20}). Tests that need exclusive X server access can use the @code{lock-name} property with a conventional name like @code{"x-server"}. This causes @code{raco test} to serialize those tests via file locking, preventing concurrent X server access conflicts. No DrDr-side changes are needed.}
 
+                                   @h2{Per-test Xvfb isolation}
+                                   @p{Tests that need their own isolated X server can be listed in the package's @code{info.rkt} using @code{test-xvfb-paths}. This property takes a list of relative path strings (files or directories), following the same convention as @code{test-omit-paths}. Matching tests are run under @code{xvfb-run} with a temporary Xvfb server instead of the shared display.}
+                                   @pre{
+;; in info.rkt:
+(define test-xvfb-paths '("gui-test.rkt" "tests/visual"))
+}
+
                                    @h1{What data is gathered during these runs?}
                                    @p{When each file is run the following is recorded: the start time, the command-line, the STDERR and STDOUT output, the exit code (unless there is a timeout), and the end time. All this information is presented in the per-file DrDr report page.}
                                    

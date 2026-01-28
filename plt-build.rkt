@@ -4,7 +4,9 @@
          racket/match
          racket/contract/base
          racket/file
+         racket/path
          racket/runtime-path
+         setup/getinfo
          "job-queue.rkt"
          "metadata.rkt"
          "run-collect.rkt"
@@ -15,6 +17,40 @@
          "path-utils.rkt"
          "sema.rkt"
          "scm.rkt")
+
+;; test-xvfb-paths: hash of normalized-path -> #t
+(define xvfb-paths (make-hash))
+(define xvfb-info-done (make-hash))
+
+(define (normalize-info-path p)
+  (simplify-path (path->complete-path p) #f))
+
+(define (check-xvfb-info dir)
+  (define ndir (normalize-info-path dir))
+  (unless (hash-ref xvfb-info-done ndir #f)
+    (hash-set! xvfb-info-done ndir #t)
+    (with-handlers ([exn:fail? (lambda (_) (void))])
+      (define info (get-info/full dir))
+      (when info
+        (define v (info 'test-xvfb-paths (lambda () '())))
+        (when (list? v)
+          (for ([i (in-list v)])
+            (when (path-string? i)
+              (define p (normalize-info-path (path->complete-path i dir)))
+              (define dp (if (directory-exists? p)
+                             (path->directory-path p)
+                             p))
+              (hash-set! xvfb-paths dp #t))))))))
+
+(define (path-needs-xvfb? pth trunk-dir)
+  (define-values (base name dir?) (split-path pth))
+  (define dir (if (path? base) (path->complete-path base) (current-directory)))
+  (check-xvfb-info dir)
+  (let ([p (normalize-info-path pth)])
+    (or (hash-ref xvfb-paths p #f)
+        (let-values ([(base name dir?) (split-path p)])
+          (and (path? base)
+               (hash-ref xvfb-paths base #f))))))
 
 (define current-env (make-parameter (make-immutable-hash empty)))
 (define-syntax-rule (with-env ([env-expr val-expr] ...) expr ...)
@@ -255,14 +291,17 @@
                      (status! 'start)
                      (vector-set! lab 2 (current-seconds))
                      (notify! "job start: ~v" lab)
+                     (define needs-xvfb (path-needs-xvfb? pth trunk-dir))
                      (dynamic-wind
                          void
                          (λ ()
                             (with-env
                               (["DISPLAY"
-                                (format ":~a"
-                                        (cpu->child
-                                          (current-worker)))])
+                                (if needs-xvfb
+                                  ""
+                                  (format ":~a"
+                                          (cpu->child
+                                            (current-worker))))])
                               (status! 'env)
                               (with-temporary-tmp-directory
                                 (status! 'tmp)
@@ -273,12 +312,19 @@
                                     (with-temporary-directory
                                       (log-pth->dir-name log-pth)
                                       (status! 'tmp2)
+                                      (define final-cmd
+                                        (if needs-xvfb
+                                          (list* "/usr/bin/xvfb-run"
+                                                 "--auto-servernum"
+                                                 "--server-args=-screen 0 1024x768x24"
+                                                 cmd)
+                                          cmd))
                                       (run/collect/wait/log
                                         log-pth
                                         #:timeout (current-make-install-timeout-seconds)
                                         #:env (current-env)
-                                        (first cmd)
-                                        (rest cmd))))))))
+                                        (first final-cmd)
+                                        (rest final-cmd))))))))
                          (λ ()
                            (semaphore-post dir-sema)))))]
                  [else
