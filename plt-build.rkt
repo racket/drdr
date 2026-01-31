@@ -52,6 +52,19 @@
           (and (path? base)
                (hash-ref xvfb-paths base #f))))))
 
+;; Given a test file path, trunk directory, and command, returns
+;; (values display-string final-cmd) where display-string is "" when
+;; xvfb-run wraps the command, or the given fallback-display otherwise.
+(define (maybe-wrap-xvfb pth trunk-dir cmd fallback-display)
+  (define needs-xvfb (path-needs-xvfb? pth trunk-dir))
+  (if needs-xvfb
+      (values ""
+              (list* "/usr/bin/xvfb-run"
+                     "--auto-servernum"
+                     "--server-args=-screen 0 1024x768x24"
+                     cmd))
+      (values fallback-display cmd)))
+
 (define current-env (make-parameter (make-immutable-hash empty)))
 (define-syntax-rule (with-env ([env-expr val-expr] ...) expr ...)
   (parameterize ([current-env
@@ -291,17 +304,16 @@
                      (status! 'start)
                      (vector-set! lab 2 (current-seconds))
                      (notify! "job start: ~v" lab)
-                     (define needs-xvfb (path-needs-xvfb? pth trunk-dir))
+                     (define-values (display-str final-cmd)
+                       (maybe-wrap-xvfb pth trunk-dir cmd
+                                        (format ":~a"
+                                                (cpu->child
+                                                  (current-worker)))))
                      (dynamic-wind
                          void
                          (λ ()
                             (with-env
-                              (["DISPLAY"
-                                (if needs-xvfb
-                                  ""
-                                  (format ":~a"
-                                          (cpu->child
-                                            (current-worker))))])
+                              (["DISPLAY" display-str])
                               (status! 'env)
                               (with-temporary-tmp-directory
                                 (status! 'tmp)
@@ -312,13 +324,6 @@
                                     (with-temporary-directory
                                       (log-pth->dir-name log-pth)
                                       (status! 'tmp2)
-                                      (define final-cmd
-                                        (if needs-xvfb
-                                          (list* "/usr/bin/xvfb-run"
-                                                 "--auto-servernum"
-                                                 "--server-args=-screen 0 1024x768x24"
-                                                 cmd)
-                                          cmd))
                                       (run/collect/wait/log
                                         log-pth
                                         #:timeout (current-make-install-timeout-seconds)
@@ -509,3 +514,88 @@
 
 (provide/contract
  [integrate-revision (exact-nonnegative-integer? . -> . void)])
+
+(module+ test
+  (require rackunit racket/file "status.rkt")
+
+  ;; Set up a temporary package directory with info.rkt that defines test-xvfb-paths
+  (define tmp (make-temporary-file "xvfb-test-~a" 'directory))
+  (define sub (build-path tmp "tests"))
+  (make-directory* sub)
+
+  ;; Create info.rkt listing one file and one directory
+  (display-to-file
+   "#lang info\n(define test-xvfb-paths '(\"gui-test.rkt\" \"tests\"))\n"
+   (build-path tmp "info.rkt"))
+
+  ;; Create the files so paths resolve
+  (display-to-file "" (build-path tmp "gui-test.rkt"))
+  (display-to-file "" (build-path tmp "other.rkt"))
+  (display-to-file "" (build-path sub "visual.rkt"))
+
+  ;; Clear caches from any prior test run
+  (hash-clear! xvfb-paths)
+  (hash-clear! xvfb-info-done)
+
+  ;; File listed directly should match
+  (check-true (and (path-needs-xvfb? (build-path tmp "gui-test.rkt") tmp) #t))
+
+  ;; File under a listed directory should match
+  (check-true (and (path-needs-xvfb? (build-path sub "visual.rkt") tmp) #t))
+
+  ;; File not listed should not match
+  (check-false (path-needs-xvfb? (build-path tmp "other.rkt") tmp))
+
+  (delete-directory/files tmp)
+
+  ;; Integration test: maybe-wrap-xvfb drives xvfb-run wrapping of the command
+  (define tmp2 (make-temporary-file "xvfb-int-~a" 'directory))
+
+  (display-to-file
+   "#lang info\n(define test-xvfb-paths '(\"print-display.rkt\"))\n"
+   (build-path tmp2 "info.rkt"))
+
+  (display-to-file
+   "#lang racket/base\n(displayln (getenv \"DISPLAY\"))\n"
+   (build-path tmp2 "print-display.rkt"))
+
+  (hash-clear! xvfb-paths)
+  (hash-clear! xvfb-info-done)
+
+  (define test-pth (build-path tmp2 "print-display.rkt"))
+
+  ;; Build cmd the same way production code does: raco test <path>
+  (define cmd (list (path->string (find-executable-path "raco"))
+                    "test" (path->string test-pth)))
+
+  ;; Call the same function the production code calls
+  (define-values (display-str final-cmd)
+    (maybe-wrap-xvfb test-pth tmp2 cmd ":20"))
+
+  ;; Should have chosen xvfb-run
+  (check-equal? display-str "")
+  (check-equal? (first final-cmd) "/usr/bin/xvfb-run")
+
+  (define result
+    (run/collect/wait
+     #:env (make-immutable-hash
+            (list (cons "PATH" (getenv "PATH"))
+                  (cons "DISPLAY" display-str)
+                  (cons "HOME" (path->string (find-system-path 'home-dir)))
+                  (cons "TMPDIR" (path->string (find-system-path 'temp-dir)))))
+     #:timeout 30
+     (first final-cmd)
+     (rest final-cmd)))
+
+  (check-pred exit? result)
+  (check-equal? (exit-code result) 0)
+  ;; stdout should contain a DISPLAY value like ":99" set by xvfb-run
+  (define stdout-lines
+    (for/list ([e (in-list (status-output-log result))]
+               #:when (stdout? e))
+      (stdout-bytes e)))
+  (check-true (pair? stdout-lines))
+  (check-true (for/or ([l (in-list stdout-lines)])
+                (regexp-match? #rx#"^:" l)))
+
+  (delete-directory/files tmp2))
