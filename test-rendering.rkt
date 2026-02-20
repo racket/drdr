@@ -208,6 +208,32 @@
                              (check-regexp-match #rx"Failure" body)
                              (check-regexp-match #rx"Timeout" body))))
 
+    (test-case "file history page shows exit codes"
+      (call-with-test-data (lambda ()
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"Exit Code" body)
+                             ;; Success revisions show exit code 0
+                             (check-regexp-match #rx"<td>0</td>" body)
+                             ;; Failure revision shows exit code 1
+                             (check-regexp-match #rx"<td>1</td>" body))))
+
+    (test-case "file history page shows missing for revisions without file"
+      (call-with-test-data (lambda ()
+                             ;; Create a revision with no log for test-file-path
+                             (make-directory* (revision-log-dir 99))
+                             (make-directory* (revision-analyze-dir 99))
+                             (write-to-file* (current-seconds)
+                                             (build-path (revision-dir 99) "analyzed"))
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"99" body)
+                             (check-regexp-match #rx"Missing" body))))
+
     (test-case "file result page links to file history"
       (call-with-test-data (lambda ()
                              (define resp
