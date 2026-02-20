@@ -1173,7 +1173,7 @@ in.}
     (sort (filter-map (compose string->number path->string)
                       (directory-list* builds-pth))
           >))
-  ;; Compute analyze path for a revision
+  ;; Compute analyze and log paths for a revision
   (define (rev-analyze-path rev)
     (define log-dir (revision-log-dir rev))
     (define analyze-dir (revision-analyze-dir rev))
@@ -1181,19 +1181,19 @@ in.}
      ((rebase-path log-dir analyze-dir)
       (build-path log-dir file-rel-path))
      ".analyze"))
-  ;; Filter to revisions that have an analyze file (cheap file-exists? check)
-  (define revs-with-file
-    (filter (lambda (rev) (file-exists? (rev-analyze-path rev)))
-            all-rev-nums))
-  (define how-many-total (length revs-with-file))
+  (define (rev-log-path rev)
+    (build-path (revision-log-dir rev) file-rel-path))
+  (define how-many-total (length all-rev-nums))
   ;; Only read cache for the page we need to display
-  (define page-revs (list-limit how-many-file-results offset revs-with-file))
+  (define page-revs (list-limit how-many-file-results offset all-rev-nums))
   (define page-results
-    (filter-map
-     (lambda (rev)
-       (define r (read-cache* (rev-analyze-path rev)))
-       (and r (rendering? r) (cons rev r)))
-     page-revs))
+    (map (lambda (rev)
+           (define pth (rev-analyze-path rev))
+           (define r (and (file-exists? pth) (read-cache* pth)))
+           (define log-pth (rev-log-path rev))
+           (define log (and r (file-exists? log-pth) (read-cache* log-pth)))
+           (list rev (and r (rendering? r) r) log))
+         page-revs))
   (define history-url (format "/file-history/~a" file-path-str))
   (define title (format "DrDr / File History / ~a" file-path-str))
 
@@ -1213,12 +1213,23 @@ in.}
                   (thead
                    (tr (td "Push#")
                        (td "Status")
+                       (td "Exit Code")
                        (td "Duration")
                        (td "Changed?")))
                   (tbody
                    ,@(map
                       (match-lambda
-                        [(cons rev (struct rendering (_ _ dur timeout unclean stderr _ changed)))
+                        [(list rev #f _)
+                         (define name (number->string rev))
+                         (define url (format "/~a/" rev))
+                         `(tr ([class "dir"]
+                               [onclick ,(format "document.location = ~S" url)])
+                              (td (a ([href ,url]) ,name))
+                              (td "Missing")
+                              (td "")
+                              (td "")
+                              (td ""))]
+                        [(list rev (struct rendering (_ _ dur timeout unclean stderr _ changed)) log)
                          (define name (number->string rev))
                          (define url (format "/~a/~a" rev file-path-str))
                          (define status-text
@@ -1226,10 +1237,16 @@ in.}
                              [(not (lc-zero? timeout)) "Timeout"]
                              [(not (lc-zero? unclean)) "Failure"]
                              [else "Success"]))
+                         (define exit-code-text
+                           (cond
+                             [(and log (exit? log)) (number->string (exit-code log))]
+                             [(and log (timeout? log)) ""]
+                             [else ""]))
                          `(tr ([class "dir"]
                                [onclick ,(format "document.location = ~S" url)])
                               (td (a ([href ,url]) ,name))
                               (td ,status-text)
+                              (td ,exit-code-text)
                               (td ,(format-duration-ms dur))
                               (td ,(if (lc-zero? changed) '" " checkmark-entity)))])
                       page-results)))
