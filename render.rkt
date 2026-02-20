@@ -1236,6 +1236,8 @@ in.}
      (parameterize ([drdr-start-request (current-inexact-milliseconds)])
      (top-dispatch req))]))
 
+(provide top-dispatch log-dispatch static drdr-start-request)
+
 (module+ main
   (date-display-format 'iso-8601)
   (cache/file-mode 'no-cache)
