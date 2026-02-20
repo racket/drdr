@@ -1173,22 +1173,27 @@ in.}
     (sort (filter-map (compose string->number path->string)
                       (directory-list* builds-pth))
           >))
-  ;; Collect revisions that have cached analysis for this file
-  (define revs-with-results
+  ;; Compute analyze path for a revision
+  (define (rev-analyze-path rev)
+    (define log-dir (revision-log-dir rev))
+    (define analyze-dir (revision-analyze-dir rev))
+    (path-add-suffix
+     ((rebase-path log-dir analyze-dir)
+      (build-path log-dir file-rel-path))
+     ".analyze"))
+  ;; Filter to revisions that have an analyze file (cheap file-exists? check)
+  (define revs-with-file
+    (filter (lambda (rev) (file-exists? (rev-analyze-path rev)))
+            all-rev-nums))
+  (define how-many-total (length revs-with-file))
+  ;; Only read cache for the page we need to display
+  (define page-revs (list-limit how-many-file-results offset revs-with-file))
+  (define page-results
     (filter-map
      (lambda (rev)
-       (define log-dir (revision-log-dir rev))
-       (define analyze-dir (revision-analyze-dir rev))
-       (define log-pth (build-path log-dir file-rel-path))
-       (define analyze-pth
-         (path-add-suffix
-          ((rebase-path log-dir analyze-dir) log-pth)
-          ".analyze"))
-       (define r (read-cache* analyze-pth))
+       (define r (read-cache* (rev-analyze-path rev)))
        (and r (rendering? r) (cons rev r)))
-     all-rev-nums))
-  (define how-many-total (length revs-with-results))
-  (define page-results (list-limit how-many-file-results offset revs-with-results))
+     page-revs))
   (define history-url (format "/file-history/~a" file-path-str))
   (define title (format "DrDr / File History / ~a" file-path-str))
 
