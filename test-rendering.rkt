@@ -183,7 +183,38 @@
                              (define resp (dispatch-request "http://localhost/101/no/such/file.rkt"))
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
-                             (check-regexp-match #rx"does not exist" body))))))
+                             (check-regexp-match #rx"does not exist" body))))
+
+    (test-case "file history page lists all revisions"
+      (call-with-test-data (lambda ()
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (check-equal? (response-code resp) 200)
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"File History" body)
+                             (check-regexp-match #rx"100" body)
+                             (check-regexp-match #rx"101" body)
+                             (check-regexp-match #rx"102" body)
+                             (check-regexp-match #rx"103" body))))
+
+    (test-case "file history page shows status for each revision"
+      (call-with-test-data (lambda ()
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"Success" body)
+                             (check-regexp-match #rx"Failure" body)
+                             (check-regexp-match #rx"Timeout" body))))
+
+    (test-case "file result page links to file history"
+      (call-with-test-data (lambda ()
+                             (define resp
+                               (dispatch-request (format "http://localhost/101/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"file-history" body)
+                             (check-regexp-match #rx"All results for this file" body))))))
 
 (module+ test
   (require rackunit/text-ui)
