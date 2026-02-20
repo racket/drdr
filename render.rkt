@@ -473,7 +473,10 @@
                                              "(timing data)")))
                              (tr (td "Timeout:") (td ,(if (timeout? log) checkmark-entity "")))
                              (tr (td "Exit Code:") (td ,(if (exit? log) (number->string (exit-code log)) "")))
-                             (tr (td "Random?") (td ,(if (rendering-random? the-log-rendering) "Yes" "No"))))
+                             (tr (td "Random?") (td ,(if (rendering-random? the-log-rendering) "Yes" "No")))
+                             (tr (td "History:")
+                                 (td (a ([href ,(format "/file-history~a" the-base-path)])
+                                        "All results for this file"))))
                       ,(if (lc-zero? changed)
                            ""
                            `(div ([class "error"])
@@ -1154,6 +1157,96 @@ in.}
   (redirect-to
    (apply top-url show-file (newest-completed-revision) args)))
 
+(define how-many-file-results 45)
+(define (show-file-history req path-to-file)
+  (define file-rel-path (apply build-path path-to-file))
+  (define file-path-str (string-join path-to-file "/"))
+  (define offset
+    (match (bindings-assq #"offset" (request-bindings/raw req))
+      [(struct binding:form (_ val))
+       (string->number (bytes->string/utf-8 val))]
+      [_
+       0]))
+  ;; Get all revision numbers sorted descending (newest first)
+  (define builds-pth (plt-build-directory))
+  (define all-rev-nums
+    (sort (filter-map (compose string->number path->string)
+                      (directory-list* builds-pth))
+          >))
+  ;; Collect revisions that have cached analysis for this file
+  (define revs-with-results
+    (filter-map
+     (lambda (rev)
+       (define log-dir (revision-log-dir rev))
+       (define analyze-dir (revision-analyze-dir rev))
+       (define log-pth (build-path log-dir file-rel-path))
+       (define analyze-pth
+         (path-add-suffix
+          ((rebase-path log-dir analyze-dir) log-pth)
+          ".analyze"))
+       (define r (read-cache* analyze-pth))
+       (and r (rendering? r) (cons rev r)))
+     all-rev-nums))
+  (define how-many-total (length revs-with-results))
+  (define page-results (list-limit how-many-file-results offset revs-with-results))
+  (define history-url (format "/file-history/~a" file-path-str))
+  (define title (format "DrDr / File History / ~a" file-path-str))
+
+  (response/xexpr
+   `(html
+     (head (title ,title)
+           (link ([rel "stylesheet"] [type "text/css"] [href "/render.css"])))
+     (body
+      (div ([class "dirlog, content"])
+           (span ([class "breadcrumb"])
+                 (a ([class "parent"] [href "/"])
+                    "DrDr")
+                 " / "
+                 (span ([class "this"])
+                       "File History: /" ,file-path-str))
+           (table ([class "dirlist frontpage"])
+                  (thead
+                   (tr (td "Push#")
+                       (td "Status")
+                       (td "Duration")
+                       (td "Changed?")))
+                  (tbody
+                   ,@(map
+                      (match-lambda
+                        [(cons rev (struct rendering (_ _ dur timeout unclean stderr _ changed)))
+                         (define name (number->string rev))
+                         (define url (format "/~a/~a" rev file-path-str))
+                         (define status-text
+                           (cond
+                             [(not (lc-zero? timeout)) "Timeout"]
+                             [(not (lc-zero? unclean)) "Failure"]
+                             [else "Success"]))
+                         `(tr ([class "dir"]
+                               [onclick ,(format "document.location = ~S" url)])
+                              (td (a ([href ,url]) ,name))
+                              (td ,status-text)
+                              (td ,(format-duration-ms dur))
+                              (td ,(if (lc-zero? changed) '" " checkmark-entity)))])
+                      page-results)))
+           (table ([id "revnav"] [width "100%"])
+                  (tr (td ([align "left"])
+                          (span ([class "revnav"])
+                                (a ([href ,history-url])
+                                   (img ([src "/images/skip-backward1.png"])))
+                                (a ([href ,(format "~a?offset=~a" history-url
+                                                   (max 0 (- offset how-many-file-results)))])
+                                   (img ([src "/images/rewind.png"])))))
+                      (td ([align "right"])
+                          (span ([class "revnav"])
+                                (a ([href ,(format "~a?offset=~a" history-url
+                                                   (min (max 0 (- how-many-total how-many-file-results))
+                                                        (+ offset how-many-file-results)))])
+                                   (img ([src "/images/fast-forward.png"])))
+                                (a ([href ,(format "~a?offset=~a" history-url
+                                                   (max 0 (- how-many-total how-many-file-results)))])
+                                   (img ([src "/images/skip-forward1.png"])))))))
+           ,(footer))))))
+
 (define (show-diff req r1 r2 f)
   (define f1 (apply build-path (revision-log-dir r1) f))
   (with-handlers ([(lambda (x)
@@ -1208,6 +1301,7 @@ in.}
    [("help") show-help]
    [("") show-revisions]
    [("diff" (integer-arg) (integer-arg) (string-arg) ...) show-diff]
+   [("file-history" (string-arg) ...) show-file-history]
    [("json" "timing" (string-arg) ...) json-timing]
    [("previous-change" (integer-arg) (string-arg) ...) show-file/prev-change]
    [("next-change" (integer-arg) (string-arg) ...) show-file/next-change]
