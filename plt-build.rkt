@@ -549,6 +549,10 @@
   (delete-directory/files tmp)
 
   ;; Integration test: maybe-wrap-xvfb drives xvfb-run wrapping of the command
+  ;; Find raco next to the currently running racket binary
+  (define raco-path
+    (build-path (path-only (find-system-path 'exec-file)) "raco"))
+
   (define tmp2 (make-temporary-file "xvfb-int-~a" 'directory))
 
   (display-to-file
@@ -565,7 +569,7 @@
   (define test-pth (build-path tmp2 "print-display.rkt"))
 
   ;; Build cmd the same way production code does: raco test <path>
-  (define cmd (list (path->string (find-executable-path "raco"))
+  (define cmd (list (path->string raco-path)
                     "test" (path->string test-pth)))
 
   ;; Call the same function the production code calls
