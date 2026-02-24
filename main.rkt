@@ -12,6 +12,7 @@
          "cache.rkt"
          "path-utils.rkt")
 
+(putenv "PLT_DISPLAY_BACKING_SCALE" "1.0")
 (init-revisions!)
 (define cur-rev (newest-revision))
 (define prev-rev (second-newest-revision))

@@ -21,7 +21,6 @@
        [(? stderr?)
         (cons (cons s trl) rrl)])]))
 
-'
 (module+ test
   (require rackunit)
   (check-equal?
