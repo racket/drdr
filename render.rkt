@@ -1192,7 +1192,8 @@ in.}
            (define r (and (file-exists? pth) (read-cache* pth)))
            (define log-pth (rev-log-path rev))
            (define log (and r (file-exists? log-pth) (read-cache* log-pth)))
-           (list rev (and r (rendering? r) r) log))
+           (define analyzed? (file-exists? (build-path (revision-dir rev) "analyzed")))
+           (list rev (and r (rendering? r) r) log analyzed?))
          page-revs))
   (define history-url (format "/file-history/~a" file-path-str))
   (define title (format "DrDr / File History / ~a" file-path-str))
@@ -1219,17 +1220,17 @@ in.}
                   (tbody
                    ,@(map
                       (match-lambda
-                        [(list rev #f _)
+                        [(list rev #f _ analyzed?)
                          (define name (number->string rev))
                          (define url (format "/~a/" rev))
                          `(tr ([class "dir"]
                                [onclick ,(format "document.location = ~S" url)])
                               (td (a ([href ,url]) ,name))
-                              (td "Missing")
+                              (td ,(if analyzed? "Missing" "Pending"))
                               (td "")
                               (td "")
                               (td ""))]
-                        [(list rev (struct rendering (_ _ dur timeout unclean stderr _ changed)) log)
+                        [(list rev (struct rendering (_ _ dur timeout unclean stderr _ changed)) log _)
                          (define name (number->string rev))
                          (define url (format "/~a/~a" rev file-path-str))
                          (define status-text

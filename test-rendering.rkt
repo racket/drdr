@@ -234,6 +234,21 @@
                              (check-regexp-match #rx"99" body)
                              (check-regexp-match #rx"Missing" body))))
 
+    (test-case "file history page shows pending for incomplete revisions"
+      (call-with-test-data (lambda ()
+                             ;; Create a revision directory with no "analyzed" marker
+                             (make-directory* (revision-log-dir 104))
+                             (make-directory* (revision-analyze-dir 104))
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"104" body)
+                             (check-regexp-match #rx"Pending" body)
+                             ;; Should NOT show "Missing" for rev 104
+                             ;; (Missing should only appear for completed rev 99 if present)
+                             )))
+
     (test-case "file result page links to file history"
       (call-with-test-data (lambda ()
                              (define resp
