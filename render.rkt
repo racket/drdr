@@ -1233,10 +1233,14 @@ in.}
                         [(list rev (struct rendering (_ _ dur timeout unclean stderr _ changed)) log _)
                          (define name (number->string rev))
                          (define url (format "/~a/~a" rev file-path-str))
+                         (define has-unclean? (not (lc-zero? unclean)))
+                         (define has-stderr? (not (lc-zero? stderr)))
                          (define status-text
                            (cond
                              [(not (lc-zero? timeout)) "Timeout"]
-                             [(not (lc-zero? unclean)) "Failure"]
+                             [(and has-unclean? has-stderr?) "Failure + Stderr"]
+                             [has-unclean? "Failure"]
+                             [has-stderr? "Stderr"]
                              [else "Success"]))
                          (define exit-code-text
                            (cond

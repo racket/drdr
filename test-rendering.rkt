@@ -65,6 +65,12 @@
                   (list "raco" "test" test-file-path)
                   (list (make-stdout #"running tests...\n") (make-stderr #"FAILURE: test failed\n"))
                   1)]
+      [(stderr)
+       (make-exit start-ms
+                  end-ms
+                  (list "raco" "test" test-file-path)
+                  (list (make-stdout #"running tests...\n") (make-stderr #"warning: something\n"))
+                  0)]
       [else
        (make-exit start-ms
                   end-ms
@@ -205,8 +211,18 @@
                                 (format "http://localhost/file-history/~a" test-file-path)))
                              (define body (response-body resp))
                              (check-regexp-match #rx"Success" body)
-                             (check-regexp-match #rx"Failure" body)
+                             (check-regexp-match #rx"Failure \\+ Stderr" body)
                              (check-regexp-match #rx"Timeout" body))))
+
+    (test-case "file history page shows stderr status for exit-0 with stderr"
+      (call-with-test-data (lambda ()
+                             (parameterize ([cache/file-mode 'cache])
+                               (make-test-revision 104 #:status 'stderr #:author "carol"))
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"Stderr" body))))
 
     (test-case "file history page shows exit codes"
       (call-with-test-data (lambda ()
