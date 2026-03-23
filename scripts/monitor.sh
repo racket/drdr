@@ -54,11 +54,11 @@ tmux new-window -t "$SESSION" -n "logs" \
 tmux split-window -v -t "$SESSION:logs" \
     "journalctl -u drdr-render -f"
 
-# Window 2: status (scrollable, re-run with up-arrow + enter to refresh)
+# Window 2: status (auto-refreshing, compact)
 tmux new-window -t "$SESSION" -n "status" \
-    "systemctl status drdr-main -l"
+    "watch -n 5 'systemctl status drdr-main --no-pager -n0 2>&1'"
 tmux split-window -v -t "$SESSION:status" \
-    "systemctl status drdr-render -l"
+    "watch -n 5 'systemctl status drdr-render --no-pager -n0 2>&1'"
 
 # Start on the shell window
 tmux select-window -t "$SESSION:shell"

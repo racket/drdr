@@ -23,7 +23,7 @@ LimitCORE=51200000
 
 # Kill all children (X server, metacity, test subprocesses)
 KillMode=control-group
-TimeoutStopSec=300s
+TimeoutStopSec=30s
 SendSIGKILL=yes
 
 # IPC isolation - safe because Xorg runs in same cgroup
