@@ -47,10 +47,11 @@ Check NAT rule:  sudo iptables -t nat -L PREROUTING -n
 Test web:        curl -s http://localhost:9000/ | head
 Test port 80:    curl -s http://localhost/ | head
 
-Tmux: Ctrl-b n = next window, Ctrl-b p = prev, Ctrl-b d = detach
+Tmux: Ctrl-b n/p = next/prev window, Ctrl-b up/down = switch pane
+      Ctrl-b d = detach, reattach: tmux attach -t drdr-monitor
 HELP
-exec bash"
-tmux resize-pane -t "$SESSION:shell.0" -y 18
+sleep infinity"
+tmux resize-pane -t "$SESSION:shell.0" -y 20
 tmux split-window -v -t "$SESSION:shell"
 
 # Start on the logs window
