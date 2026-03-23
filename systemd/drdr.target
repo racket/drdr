@@ -1,0 +1,4 @@
+[Unit]
+Description=DrDr CI stack (main + render)
+Wants=drdr-main.service drdr-render.service
+After=drdr-main.service drdr-render.service

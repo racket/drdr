@@ -1,0 +1,36 @@
+[Unit]
+Description=DrDr main CI service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jay
+Group=jay
+WorkingDirectory=/opt/svn/drdr
+
+ExecStartPre=/usr/bin/git -C /opt/svn/drdr pull origin master
+ExecStartPre=/bin/sh -c '/opt/plt/plt/bin/raco make *.rkt */*.rkt'
+ExecStart=/opt/plt/plt/bin/racket -t /opt/svn/drdr/main.rkt
+
+# main.rkt exits 0 after each revision (line 84) to force restart
+Restart=always
+RestartSec=2s
+
+Environment=PLTSTDERR=info
+
+# Core dump limit matching good-init.sh ulimit -c 100000
+LimitCORE=51200000
+
+# Kill all children (X server, metacity, test subprocesses)
+KillMode=control-group
+TimeoutStopSec=30s
+SendSIGKILL=yes
+
+# IPC isolation - safe because Xorg runs in same cgroup
+PrivateIPC=yes
+
+# Do NOT set NoNewPrivileges=yes - Xorg.wrap is setuid root
+
+[Install]
+WantedBy=multi-user.target

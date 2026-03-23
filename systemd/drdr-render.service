@@ -1,0 +1,31 @@
+[Unit]
+Description=DrDr web renderer (port 9000)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jay
+Group=jay
+WorkingDirectory=/opt/svn/drdr
+
+ExecStartPre=/bin/sh -c '/opt/plt/plt/bin/raco make *.rkt */*.rkt'
+ExecStartPre=+/bin/sh -c '/usr/sbin/iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9000 2>/dev/null || /usr/sbin/iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9000'
+ExecStart=/opt/plt/plt/bin/racket -t /opt/svn/drdr/render.rkt
+ExecStopPost=-+/usr/sbin/iptables -t nat -D PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9000
+
+# Restart on any exit, matching good-init.sh behavior
+Restart=always
+RestartSec=5s
+
+Environment=PLTSTDERR=warning
+
+KillMode=control-group
+TimeoutStopSec=30s
+SendSIGKILL=yes
+
+NoNewPrivileges=yes
+PrivateIPC=yes
+
+[Install]
+WantedBy=multi-user.target
