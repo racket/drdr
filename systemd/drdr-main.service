@@ -16,7 +16,7 @@ ExecStart=/opt/plt/plt/bin/racket -t /opt/svn/drdr/main.rkt
 Restart=always
 RestartSec=2s
 
-Environment=PLTSTDERR=warning
+Environment=PLTSTDERR=info
 
 # Core dump limit matching good-init.sh ulimit -c 100000
 LimitCORE=51200000
