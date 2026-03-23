@@ -72,13 +72,15 @@ validate() {
         errors=$((errors + 1))
     fi
 
-    # Write paths exist and are writable by jay (the service user)
+    # Write paths exist and are owned by jay (the service user)
     for dir in /opt/plt/builds /opt/plt/logs /opt/plt/future-builds /opt/plt/repo; do
         if [ -d "$dir" ]; then
-            if sudo -u jay test -w "$dir" 2>/dev/null; then
-                echo "OK   $dir exists and is writable by jay"
+            local owner
+            owner=$(stat -c '%U' "$dir" 2>/dev/null)
+            if [ "$owner" = "jay" ]; then
+                echo "OK   $dir exists and is owned by jay"
             else
-                echo "WARN $dir exists but is not writable by jay"
+                echo "WARN $dir exists but is owned by $owner, not jay"
                 warnings=$((warnings + 1))
             fi
         else
