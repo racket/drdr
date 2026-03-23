@@ -11,11 +11,10 @@ fi
 
 echo "Creating tmux session '$SESSION'..."
 
-tmux set-option -t "$SESSION" status-left-length 20
-
 # Window 1: logs (split horizontally)
 tmux new-session -d -s "$SESSION" -n "logs" \
     "journalctl -u drdr-main -f"
+tmux set-option -t "$SESSION" status-left-length 20
 tmux split-window -v -t "$SESSION:logs" \
     "journalctl -u drdr-render -f"
 
