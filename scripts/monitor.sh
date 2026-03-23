@@ -11,24 +11,19 @@ fi
 
 echo "Creating tmux session '$SESSION'..."
 
-# Window 1: logs (split horizontally)
-tmux new-session -d -s "$SESSION" -n "logs" \
-    "journalctl -u drdr-main -f"
+# Window 0: shell + help
+tmux new-session -d -s "$SESSION" -n "shell"
 tmux set-option -t "$SESSION" status-left-length 20
-tmux split-window -v -t "$SESSION:logs" \
-    "journalctl -u drdr-render -f"
-
-# Window 2: status (scrollable, re-run with up-arrow + enter to refresh)
-tmux new-window -t "$SESSION" -n "status" \
-    "systemctl status drdr-main -l"
-tmux split-window -v -t "$SESSION:status" \
-    "systemctl status drdr-render -l"
-
-# Window 3: help + shell
-tmux new-window -t "$SESSION" -n "shell" \
+tmux split-window -v -t "$SESSION:shell" \
     "cat <<'HELP'
-DrDr Operations
-===============
+DrDr Monitor
+============
+Window 0 (shell):   shell (top) + this help (bottom)
+Window 1 (logs):    main log (top) + render log (bottom)
+Window 2 (status):  main status (top) + render status (bottom)
+
+Commands
+--------
 Restart both:    sudo systemctl restart drdr-main drdr-render
 Restart main:    sudo systemctl restart drdr-main
 Restart render:  sudo systemctl restart drdr-render
@@ -51,10 +46,21 @@ Tmux: Ctrl-b n/p = next/prev window, Ctrl-b up/down = switch pane
       Ctrl-b d = detach, reattach: tmux attach -t drdr-monitor
 HELP
 sleep infinity"
-tmux resize-pane -t "$SESSION:shell.0" -y 20
-tmux split-window -v -t "$SESSION:shell"
+tmux resize-pane -t "$SESSION:shell.1" -y 22
 
-# Start on the logs window
-tmux select-window -t "$SESSION:logs"
+# Window 1: logs (split horizontally)
+tmux new-window -t "$SESSION" -n "logs" \
+    "journalctl -u drdr-main -f"
+tmux split-window -v -t "$SESSION:logs" \
+    "journalctl -u drdr-render -f"
+
+# Window 2: status (scrollable, re-run with up-arrow + enter to refresh)
+tmux new-window -t "$SESSION" -n "status" \
+    "systemctl status drdr-main -l"
+tmux split-window -v -t "$SESSION:status" \
+    "systemctl status drdr-render -l"
+
+# Start on the shell window
+tmux select-window -t "$SESSION:shell"
 
 exec tmux attach-session -t "$SESSION"
