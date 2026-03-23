@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "$(id -un)" != "jay" ]; then
-    echo "ERROR: this script must be run as jay, not $(id -un)" >&2
-    exit 1
-fi
 
 if [ "${1:-}" = "--stop" ]; then
     echo "Stopping DrDr services..."

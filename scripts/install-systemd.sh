@@ -64,11 +64,11 @@ validate() {
         errors=$((errors + 1))
     fi
 
-    # Running as jay
-    if [ "$(id -un)" = "jay" ]; then
-        echo "OK   running as user jay"
+    # User jay exists (services run as jay via User= directive)
+    if id jay >/dev/null 2>&1; then
+        echo "OK   user jay exists ($(id jay))"
     else
-        echo "FAIL expected to run as jay, running as $(id -un)"
+        echo "FAIL user jay does not exist (needed by unit files)"
         errors=$((errors + 1))
     fi
 
@@ -124,9 +124,9 @@ validate() {
 
     # sudo access
     if groups | grep -qw sudo; then
-        echo "OK   jay is in the sudo group"
+        echo "OK   $(id -un) is in the sudo group"
     else
-        echo "WARN jay is not in the sudo group (needed for systemctl)"
+        echo "WARN $(id -un) is not in the sudo group (needed for systemctl)"
         warnings=$((warnings + 1))
     fi
 
