@@ -1,0 +1,17 @@
+name: Tests
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Bogdanp/setup-racket@v1.12
+        with:
+          version: stable
+      - run: sudo apt-get install -y xvfb
+      - run: raco pkg install --auto --no-docs --batch
+      - run: raco test -y .

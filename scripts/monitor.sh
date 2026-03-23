@@ -38,6 +38,8 @@ Deploy update:   cd /opt/svn/drdr && git pull && scripts/deploy-systemd.sh
 Uninstall:       cd /opt/svn/drdr && scripts/uninstall-systemd.sh
 Rollback:        scripts/uninstall-systemd.sh && ./good-init.sh
 
+Note: main auto-pulls from origin/master on each restart (between cycles)
+
 Check NAT rule:  sudo iptables -t nat -L PREROUTING -n
 Test web:        curl -s http://localhost:9000/ | head
 Test port 80:    curl -s http://localhost/ | head

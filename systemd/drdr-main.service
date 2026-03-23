@@ -9,6 +9,7 @@ User=jay
 Group=jay
 WorkingDirectory=/opt/svn/drdr
 
+ExecStartPre=/usr/bin/git -C /opt/svn/drdr pull origin master
 ExecStartPre=/bin/sh -c '/opt/plt/plt/bin/raco make *.rkt */*.rkt'
 ExecStart=/opt/plt/plt/bin/racket -t /opt/svn/drdr/main.rkt
 
