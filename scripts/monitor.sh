@@ -17,9 +17,11 @@ tmux new-session -d -s "$SESSION" -n "logs" \
 tmux split-window -v -t "$SESSION:logs" \
     "journalctl -u drdr-render -f"
 
-# Window 2: status (refreshes every 5 seconds)
+# Window 2: status (scrollable, re-run with up-arrow + enter to refresh)
 tmux new-window -t "$SESSION" -n "status" \
-    "while true; do systemctl status drdr-main drdr-render --no-pager -l 2>&1 | less -R +F; sleep 5; done"
+    "systemctl status drdr-main -l"
+tmux split-window -v -t "$SESSION:status" \
+    "systemctl status drdr-render -l"
 
 # Window 3: shell
 tmux new-window -t "$SESSION" -n "shell"
