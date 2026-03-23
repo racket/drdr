@@ -72,13 +72,13 @@ validate() {
         errors=$((errors + 1))
     fi
 
-    # Write paths exist and are writable
+    # Write paths exist and are writable by jay (the service user)
     for dir in /opt/plt/builds /opt/plt/logs /opt/plt/future-builds /opt/plt/repo; do
         if [ -d "$dir" ]; then
-            if [ -w "$dir" ]; then
-                echo "OK   $dir exists and is writable"
+            if sudo -u jay test -w "$dir" 2>/dev/null; then
+                echo "OK   $dir exists and is writable by jay"
             else
-                echo "WARN $dir exists but is not writable"
+                echo "WARN $dir exists but is not writable by jay"
                 warnings=$((warnings + 1))
             fi
         else
