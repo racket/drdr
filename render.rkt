@@ -23,6 +23,26 @@
          "analyze.rkt"
          "status-analyze.rkt")
 
+(define (count-log-files dir)
+  (if (directory-exists? dir)
+      (for/sum ([p (in-directory dir)])
+        (if (file-exists? p) 1 0))
+      0))
+
+(define log-file-baseline #f)
+(define (get-log-file-baseline)
+  (or log-file-baseline
+      (let ()
+        (define builds (plt-build-directory))
+        (define revs
+          (sort (filter-map (compose string->number path->string)
+                            (directory-list builds))
+                >))
+        (for/or ([rev (in-list revs)])
+          (define c (count-log-files (revision-log-dir rev)))
+          (and (>= c 30000)
+               (begin (set! log-file-baseline c) c))))))
+
 (define (base-path pth)
   (define rev (current-rev))
   (define log-dir (revision-log-dir rev))
@@ -973,15 +993,20 @@ in.}
                              (define-values (committer title)
                                (log->committer+title log))
                              (define (no-rendering-row)
-                               (define mtime 
+                               (define mtime
                                  (file-or-directory-modify-seconds log-pth))
-                               
+                               (define baseline (get-log-file-baseline))
+                               (define current-count (count-log-files (revision-log-dir rev)))
+                               (define progress-str
+                                 (if (and baseline (> baseline 0))
+                                     (format " (~a%)" (quotient (* current-count 100) baseline))
+                                     ""))
                                `(tr ([class ,(format "dir ~a"
                                                      (log->branches log))]
                                      [title ,title])
                                     (td (a ([href "#"]) ,name))
                                     (td ([class "building"] [colspan "3"])
-                                        "Build in progress. Started "
+                                        "Build in progress" ,progress-str ". Started "
                                         ,(format-duration-m
                                           (/ (- (current-seconds) mtime) 60))
                                         " ago.")

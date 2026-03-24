@@ -56,9 +56,22 @@ tmux new-window -t "$SESSION" -n "logs" \
 tmux split-window -v -t "$SESSION:logs" \
     "journalctl -u drdr-render -f"
 
-# Window 2: status (auto-refreshing, compact)
+# Window 2: status (auto-refreshing, compact) + progress
 tmux new-window -t "$SESSION" -n "status" \
-    "watch -n 5 'systemctl status drdr-main --no-pager -n0 2>&1'"
+    "watch -n 30 'systemctl status drdr-main --no-pager -n0 2>&1
+echo ""
+# Progress: count log files in newest rev vs baseline from a recent complete rev
+BUILDS=/opt/plt/builds
+NEWEST=\$(ls -d \$BUILDS/[0-9]* 2>/dev/null | sort -t/ -k5 -n | tail -1 | xargs basename)
+BASELINE=\$(for d in \$(ls -d \$BUILDS/[0-9]* 2>/dev/null | sort -t/ -k5 -rn); do
+  c=\$(find \$d/logs -type f 2>/dev/null | wc -l)
+  if [ \$c -ge 30000 ]; then echo \$c; break; fi
+done)
+if [ -n \"\$NEWEST\" ] && [ -n \"\$BASELINE\" ]; then
+  CURRENT=\$(find \$BUILDS/\$NEWEST/logs -type f 2>/dev/null | wc -l)
+  PCT=\$((CURRENT * 100 / BASELINE))
+  echo \"Rev \$NEWEST: \$CURRENT / \$BASELINE log files (\$PCT%)\"
+fi'"
 tmux split-window -v -t "$SESSION:status" \
     "watch -n 5 'systemctl status drdr-render --no-pager -n0 2>&1'"
 
