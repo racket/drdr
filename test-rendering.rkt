@@ -65,6 +65,12 @@
                   (list "raco" "test" test-file-path)
                   (list (make-stdout #"running tests...\n") (make-stderr #"FAILURE: test failed\n"))
                   1)]
+      [(stderr)
+       (make-exit start-ms
+                  end-ms
+                  (list "raco" "test" test-file-path)
+                  (list (make-stdout #"running tests...\n") (make-stderr #"warning: something\n"))
+                  0)]
       [else
        (make-exit start-ms
                   end-ms
@@ -205,8 +211,18 @@
                                 (format "http://localhost/file-history/~a" test-file-path)))
                              (define body (response-body resp))
                              (check-regexp-match #rx"Success" body)
-                             (check-regexp-match #rx"Failure" body)
+                             (check-regexp-match #rx"Failure \\+ Stderr" body)
                              (check-regexp-match #rx"Timeout" body))))
+
+    (test-case "file history page shows stderr status for exit-0 with stderr"
+      (call-with-test-data (lambda ()
+                             (parameterize ([cache/file-mode 'cache])
+                               (make-test-revision 104 #:status 'stderr #:author "carol"))
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"Stderr" body))))
 
     (test-case "file history page shows exit codes"
       (call-with-test-data (lambda ()
@@ -233,6 +249,21 @@
                              (define body (response-body resp))
                              (check-regexp-match #rx"99" body)
                              (check-regexp-match #rx"Missing" body))))
+
+    (test-case "file history page shows pending for incomplete revisions"
+      (call-with-test-data (lambda ()
+                             ;; Create a revision directory with no "analyzed" marker
+                             (make-directory* (revision-log-dir 104))
+                             (make-directory* (revision-analyze-dir 104))
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (define body (response-body resp))
+                             (check-regexp-match #rx"104" body)
+                             (check-regexp-match #rx"Pending" body)
+                             ;; Should NOT show "Missing" for rev 104
+                             ;; (Missing should only appear for completed rev 99 if present)
+                             )))
 
     (test-case "file result page links to file history"
       (call-with-test-data (lambda ()
