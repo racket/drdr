@@ -78,7 +78,7 @@
   (define rev-dir (revision-dir rev))
   (define co-dir (revision-trunk-dir rev))
   (define log-dir (revision-log-dir rev))
-  (define trunk-dir (revision-trunk-dir rev))  
+  (define trunk-dir (revision-trunk-dir rev))
   ;; Checkout the repository revision
   (cache/file/timestamp
    (build-path rev-dir "checkout-done")
@@ -221,9 +221,12 @@
     (thunk)))
 
 (define-runtime-path pkgs-file "pkgs.rktd")
+(define current-tested-packages (make-parameter #f))
 (define (tested-packages)
-  (define val (file->value pkgs-file))
-  val)
+  (or (current-tested-packages)
+      (let ()
+        (define val (file->value pkgs-file))
+        val)))
 
 (define (log-pth->dir-name lp)
   (regexp-replace* #rx"/" (path->string lp) "_"))
@@ -232,6 +235,11 @@
   (define rev-dir (revision-dir rev))
   (define trunk-dir (revision-trunk-dir rev))
   (define log-dir (revision-log-dir rev))
+
+  (test-revision-at trunk-dir
+                    log-dir))
+
+(define (test-revision-at trunk-dir log-dir)
   (define trunk->log (rebase-path trunk-dir log-dir))
   (define trunk->log+cs
     (rebase-path trunk-dir (build-path log-dir "cs")))
@@ -249,10 +257,41 @@
         (make-path "")))
   (define test-workers (make-job-queue (number-of-cpus)))
 
-  (define pkgs-pths
+  (define (get-pkgs-pths)
+    ;; Old approach: assume that everything relevant is in these
+    ;; directories, and that everything in these directories is
+    ;; relevant:
+    #;
     (list (build-path trunk-dir "racket" "collects")
           (build-path trunk-dir "pkgs")
-          (build-path trunk-dir "racket" "share" "pkgs")))
+          (build-path trunk-dir "racket" "share" "pkgs"))
+    ;; New approach: besides the main "collects" directory, test
+    ;; whatever modules are are installed to be findable via
+    ;; "links.rktd", which includes installed packages --- assuming
+    ;; that no version-specific links are in place, which would be
+    ;; unusual in geenral and does not happen with DrDr.
+    (define links-dir (build-path trunk-dir "racket" "share"))
+    (define links-file (build-path links-dir "links.rktd"))
+    (define links (file->value links-file))
+    (define (encoded-path->path elems)
+      (cond
+        [(string? elems) elems]
+        [(bytes? elems) (bytes->path elems)]
+        [else
+         (simplify-path
+          (apply build-path
+                 links-dir
+                 (map (lambda (e)
+                        (if (bytes? e) (bytes->path-element e) e))
+                      elems)))]))
+    (cons
+      (build-path trunk-dir "racket" "collects")
+      (for/list ([link (in-list links)])
+        (match link
+          [`(root ,encoded-path . ,_) (encoded-path->path encoded-path)]
+          [`(static-root ,encoded-path . ,_) (encoded-path->path encoded-path)]
+          [`(,_ ,encoded-path . ,_) (encoded-path->path encoded-path)]))))
+
   (define (test-directory cs? dir-pth upper-sema)
     (define dir-log (build-path (trunk->log/cs dir-pth cs?) ".index.test"))
     (cond
@@ -382,7 +421,7 @@
   (define top-sema (make-semaphore 0))
   (notify! "Starting testing with")
   (thread (lambda ()
-    (test-directories pkgs-pths top-sema)
+    (test-directories (get-pkgs-pths) top-sema)
     (notify! "All testing scheduled... waiting for completion")))
 
   (define the-start (current-inexact-milliseconds))
@@ -603,3 +642,35 @@
                 (regexp-match? #rx#"^:" l)))
 
   (delete-directory/files tmp2))
+
+;; This `main` module is currently set up to check just the testing
+;; phase. It may make sense to generalize in the future to have different
+;; entry points into the build and test steps.
+(module+ main
+  (require (only-in racket/future processor-count))
+  (define trunk-dir (current-directory))
+  (printf (string-append
+           "Testing current durrent directory as a Racket checkout build.\n"
+           "The build should have been created already with `make both`.\n"
+           "Output will go to `build/drdr`, so delete that to start over.\n"
+           "Consider running with `info` level logging.\n"))
+  (flush-output)
+  (unless (and (file-exists? (build-path trunk-dir "Makefile"))
+               (directory-exists? (build-path trunk-dir "racket"))
+               (directory-exists? (build-path trunk-dir "racket/src"))
+               (file-exists? (build-path trunk-dir "racket/bin/racket")))
+    (error "current directory does not look like a built checkout"))
+  (define drdr-dir (build-path trunk-dir "build/drdr"))
+  (define log-dir (build-path drdr-dir "log"))
+  (define home-dir (build-path drdr-dir "home"))
+  (define tmp-dir (build-path drdr-dir "tmp"))
+  (make-directory* log-dir)
+  (make-directory* home-dir)
+  (make-directory* tmp-dir)
+  (parameterize ([current-rev 1234567890987654321]
+                 [current-env (hash "HOME" (path->string home-dir)
+                                    "TMPDIR" (path->string tmp-dir))]
+                 [current-tested-packages null]
+                 [number-of-cpus (processor-count)])
+    (test-revision-at trunk-dir
+                      log-dir)))
