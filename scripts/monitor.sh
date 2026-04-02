@@ -71,7 +71,11 @@ if [ -n \"\$NEWEST\" ] && [ -n \"\$BASELINE\" ]; then
   CURRENT=\$(find \$BUILDS/\$NEWEST/logs -type f 2>/dev/null | wc -l)
   PCT=\$((CURRENT * 100 / BASELINE))
   echo \"Rev \$NEWEST: \$CURRENT / \$BASELINE log files (\$PCT%)\"
-fi'"
+fi
+echo ""
+echo "Disk:"
+df --output=target,used,avail,pcent / /extra/ 2>/dev/null
+echo "Builds: \$(ls \$BUILDS | wc -l) in /opt/plt, \$(ls /extra/builds 2>/dev/null | wc -l) in /extra"'"
 tmux split-window -v -t "$SESSION:status" \
     "watch -n 5 'systemctl status drdr-render --no-pager -n0 2>&1'"
 
