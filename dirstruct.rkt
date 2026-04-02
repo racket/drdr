@@ -58,8 +58,18 @@
 (define previous-rev
   (make-parameter #f))
 
+(define extra-build-directory
+  (make-parameter #f))
+
 (define (revision-dir rev)
-  (build-path (plt-build-directory) (number->string rev)))
+  (define primary (build-path (plt-build-directory) (number->string rev)))
+  (if (or (directory-exists? primary)
+          (not (extra-build-directory)))
+      primary
+      (let ([extra (build-path (extra-build-directory) (number->string rev))])
+        (if (directory-exists? extra)
+            extra
+            primary))))
 
 (define (revision-log-dir rev)
   (build-path (revision-dir rev) "logs"))
@@ -111,6 +121,7 @@
  [previous-rev (parameter/c (or/c false/c exact-nonnegative-integer?))]
  [plt-directory (parameter/c path-string?)]
  [plt-build-directory (-> path?)]
+ [extra-build-directory (parameter/c (or/c false/c path-string?))]
  [plt-data-directory (-> path?)]
  [plt-future-build-directory (-> path?)]
  [drdr-directory (parameter/c path-string?)]
