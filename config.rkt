@@ -7,6 +7,7 @@
          "monitor-scm.rkt")
 
 (plt-directory "/opt/plt")
+(extra-build-directory "/extra/builds")
 (drdr-directory "/opt/svn/drdr")
 (git-path "/usr/bin/git")
 (Xvfb-path "/usr/bin/Xnest")
