@@ -257,41 +257,6 @@
         (make-path "")))
   (define test-workers (make-job-queue (number-of-cpus)))
 
-  (define (get-pkgs-pths)
-    ;; Old approach: assume that everything relevant is in these
-    ;; directories, and that everything in these directories is
-    ;; relevant:
-    #;
-    (list (build-path trunk-dir "racket" "collects")
-          (build-path trunk-dir "pkgs")
-          (build-path trunk-dir "racket" "share" "pkgs"))
-    ;; New approach: besides the main "collects" directory, test
-    ;; whatever modules are are installed to be findable via
-    ;; "links.rktd", which includes installed packages --- assuming
-    ;; that no version-specific links are in place, which would be
-    ;; unusual in geenral and does not happen with DrDr.
-    (define links-dir (build-path trunk-dir "racket" "share"))
-    (define links-file (build-path links-dir "links.rktd"))
-    (define links (file->value links-file))
-    (define (encoded-path->path elems)
-      (cond
-        [(string? elems) elems]
-        [(bytes? elems) (bytes->path elems)]
-        [else
-         (simplify-path
-          (apply build-path
-                 links-dir
-                 (map (lambda (e)
-                        (if (bytes? e) (bytes->path-element e) e))
-                      elems)))]))
-    (cons
-      (build-path trunk-dir "racket" "collects")
-      (for/list ([link (in-list links)])
-        (match link
-          [`(root ,encoded-path . ,_) (encoded-path->path encoded-path)]
-          [`(static-root ,encoded-path . ,_) (encoded-path->path encoded-path)]
-          [`(,_ ,encoded-path . ,_) (encoded-path->path encoded-path)]))))
-
   (define (test-directory cs? dir-pth upper-sema)
     (define dir-log (build-path (trunk->log/cs dir-pth cs?) ".index.test"))
     (cond
@@ -421,7 +386,7 @@
   (define top-sema (make-semaphore 0))
   (notify! "Starting testing with")
   (thread (lambda ()
-    (test-directories (get-pkgs-pths) top-sema)
+    (test-directories (get-pkgs-pths trunk-dir) top-sema)
     (notify! "All testing scheduled... waiting for completion")))
 
   (define the-start (current-inexact-milliseconds))
@@ -455,6 +420,57 @@
 
   (notify! "Stopping testing")
   (stop-job-queue! test-workers))
+
+(define (get-pkgs-pths trunk-dir)
+  ;; Old approach: assume that everything relevant is in these
+  ;; directories, and that everything in these directories is
+  ;; relevant:
+  #;
+  (list (build-path trunk-dir "racket" "collects")
+        (build-path trunk-dir "pkgs")
+        (build-path trunk-dir "racket" "share" "pkgs"))
+  ;; New approach: besides the main "collects" directory, test
+  ;; whatever modules are are installed to be findable via
+  ;; "links.rktd", which includes installed packages --- assuming
+  ;; that no version-specific links are in place, which would be
+  ;; unusual in geenral and does not happen with DrDr.
+  (define links-dir (build-path trunk-dir "racket" "share"))
+  (define links-file (build-path links-dir "links.rktd"))
+  (define links (file->value links-file))
+  (define (encoded-path->path elems)
+    (cond
+      [(string? elems) elems]
+      [(bytes? elems) (bytes->path elems)]
+      [else
+       (simplify-path
+        (apply build-path
+               links-dir
+               (map (lambda (e)
+                      (if (bytes? e) (bytes->path-element e) e))
+                    elems)))]))
+  (define link-paths
+    (for/list ([link (in-list links)])
+      (match link
+        [`(root ,encoded-path . ,_) (encoded-path->path encoded-path)]
+        [`(static-root ,encoded-path . ,_) (encoded-path->path encoded-path)]
+        [`(,_ ,encoded-path . ,_) (encoded-path->path encoded-path)])))
+  ;; Sort to match the old traversal order: paths under pkgs/ come
+  ;; before paths under racket/share/pkgs/, and within each group
+  ;; sort alphabetically. This matters because long-running tests in
+  ;; pkgs/ (like racket-test) need to start early to avoid a long
+  ;; idle tail at the end of the build.
+  (define pkgs-dir (build-path trunk-dir "pkgs"))
+  (define share-pkgs-dir (build-path trunk-dir "racket" "share" "pkgs"))
+  (define (under? p parent)
+    (define rp (find-relative-path parent p))
+    (and (relative-path? rp)
+         (not (member 'up (explode-path rp)))))
+  (define-values (pkgs-group share-pkgs-group)
+    (partition (lambda (p) (under? p pkgs-dir)) link-paths))
+  (cons
+    (build-path trunk-dir "racket" "collects")
+    (append (sort pkgs-group path<?)
+            (sort share-pkgs-group path<?))))
 
 (define (recur-many i r f)
   (if (zero? i)
@@ -642,6 +658,66 @@
                 (regexp-match? #rx#"^:" l)))
 
   (delete-directory/files tmp2))
+
+(module+ test
+  ;; Test get-pkgs-pths: builds a fake trunk with links.rktd and checks
+  ;; that the result is sorted pkgs/ before share/pkgs/, excludes
+  ;; unlinked directories, and starts with collects.
+  (let ()
+    (define fake-trunk (make-temporary-file "pkgs-pths-~a" 'directory))
+    (define collects-dir (build-path fake-trunk "racket" "collects"))
+    (define pkgs-dir (build-path fake-trunk "pkgs"))
+    (define share-dir (build-path fake-trunk "racket" "share"))
+    (define share-pkgs-dir (build-path share-dir "pkgs"))
+
+    ;; Create directory structure
+    (make-directory* collects-dir)
+    (make-directory* (build-path pkgs-dir "racket-test"))
+    (make-directory* (build-path pkgs-dir "compiler-test"))
+    (make-directory* (build-path pkgs-dir "unlinked-pkg"))  ; not in links.rktd
+    (make-directory* (build-path share-pkgs-dir "htdp-test"))
+    (make-directory* (build-path share-pkgs-dir "drracket-test"))
+    (make-directory* share-dir)
+
+    ;; Write links.rktd with relative encoded paths (as the real one uses)
+    ;; Links for pkgs/ entries and share/pkgs/ entries, but NOT unlinked-pkg
+    (write-to-file
+     `((root (up up #"pkgs" #"compiler-test"))
+       (root (up up #"pkgs" #"racket-test"))
+       (root (#"pkgs" #"drracket-test"))
+       (root (#"pkgs" #"htdp-test")))
+     (build-path share-dir "links.rktd"))
+
+    (define the-result (get-pkgs-pths fake-trunk))
+
+    ;; First entry is collects
+    (check-equal? (first the-result) collects-dir)
+
+    ;; pkgs/ entries come before share/pkgs/ entries
+    (define rest-paths (rest the-result))
+    (define pkg-group
+      (filter (lambda (p)
+                (regexp-match? #rx"/pkgs/compiler-test$|/pkgs/racket-test$"
+                               (path->string p)))
+              rest-paths))
+    (define share-group
+      (filter (lambda (p) (regexp-match? #rx"/share/pkgs/" (path->string p)))
+              rest-paths))
+    (check-true (< (index-of rest-paths (first pkg-group))
+                    (index-of rest-paths (first share-group))))
+
+    ;; Within pkgs/, sorted alphabetically: compiler-test before racket-test
+    (check-true (< (index-of rest-paths (build-path pkgs-dir "compiler-test"))
+                    (index-of rest-paths (build-path pkgs-dir "racket-test"))))
+
+    ;; Within share/pkgs/, sorted alphabetically: drracket-test before htdp-test
+    (check-true (< (index-of rest-paths (build-path share-pkgs-dir "drracket-test"))
+                    (index-of rest-paths (build-path share-pkgs-dir "htdp-test"))))
+
+    ;; Unlinked package is excluded
+    (check-false (member (build-path pkgs-dir "unlinked-pkg") the-result))
+
+    (delete-directory/files fake-trunk)))
 
 ;; This `main` module is currently set up to check just the testing
 ;; phase. It may make sense to generalize in the future to have different
