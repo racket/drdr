@@ -56,28 +56,31 @@ tmux new-window -t "$SESSION" -n "logs" \
 tmux split-window -v -t "$SESSION:logs" \
     "journalctl -u drdr-render -f"
 
-# Window 2: status (auto-refreshing, compact) + progress
-tmux new-window -t "$SESSION" -n "status" \
-    "watch -n 30 'systemctl status drdr-main --no-pager -n0 2>&1
+# Window 2: status (auto-refreshing, compact) + progress + disk
+# shellcheck disable=SC2016
+MAIN_STATUS_SCRIPT='systemctl status drdr-main --no-pager -n0 2>&1
 echo ""
-# Progress: count log files in newest rev vs baseline from a recent complete rev
 BUILDS=/opt/plt/builds
-NEWEST=\$(ls -d \$BUILDS/[0-9]* 2>/dev/null | sort -t/ -k5 -n | tail -1 | xargs basename)
-BASELINE=\$(for d in \$(ls -d \$BUILDS/[0-9]* 2>/dev/null | sort -t/ -k5 -rn); do
-  c=\$(find \$d/logs -type f 2>/dev/null | wc -l)
-  if [ \$c -ge 30000 ]; then echo \$c; break; fi
+NEWEST=$(ls -d $BUILDS/[0-9]* 2>/dev/null | sort -t/ -k5 -n | tail -1 | xargs basename)
+BASELINE=$(for d in $(ls -d $BUILDS/[0-9]* 2>/dev/null | sort -t/ -k5 -rn); do
+  c=$(find $d/logs -type f 2>/dev/null | wc -l)
+  if [ $c -ge 30000 ]; then echo $c; break; fi
 done)
-if [ -n \"\$NEWEST\" ] && [ -n \"\$BASELINE\" ]; then
-  CURRENT=\$(find \$BUILDS/\$NEWEST/logs -type f 2>/dev/null | wc -l)
-  PCT=\$((CURRENT * 100 / BASELINE))
-  echo \"Rev \$NEWEST: \$CURRENT / \$BASELINE log files (\$PCT%)\"
-fi
-echo ""
-echo "Disk:"
-df --output=target,used,avail,pcent / /extra/ 2>/dev/null
-echo "Builds: \$(ls \$BUILDS | wc -l) in /opt/plt, \$(ls /extra/builds 2>/dev/null | wc -l) in /extra"'"
-tmux split-window -v -t "$SESSION:status" \
+if [ -n "$NEWEST" ] && [ -n "$BASELINE" ]; then
+  CURRENT=$(find $BUILDS/$NEWEST/logs -type f 2>/dev/null | wc -l)
+  PCT=$((CURRENT * 100 / BASELINE))
+  echo "Rev $NEWEST: $CURRENT / $BASELINE log files ($PCT%)"
+fi'
+tmux new-window -t "$SESSION" -n "status" \
+    "watch -n 30 '$MAIN_STATUS_SCRIPT'"
+# shellcheck disable=SC2016
+DISK_SCRIPT='df --output=target,used,avail,pcent / /extra/ 2>/dev/null
+BUILDS=/opt/plt/builds
+echo "Builds: $(ls $BUILDS | wc -l) in /opt/plt, $(ls /extra/builds 2>/dev/null | wc -l) in /extra"'
+tmux split-window -v -l 30% -t "$SESSION:status.0" \
     "watch -n 5 'systemctl status drdr-render --no-pager -n0 2>&1'"
+tmux split-window -v -l 18% -t "$SESSION:status.1" \
+    "watch -n 60 '$DISK_SCRIPT'"
 
 # Start on the shell window
 tmux select-window -t "$SESSION:shell"
