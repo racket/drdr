@@ -71,6 +71,32 @@
             extra
             primary))))
 
+;; Replace the prefix of a path that was stored with the primary build
+;; directory prefix so it works with the extra build directory.
+(define (relocate-build-path pth)
+  (define pth* (if (path? pth) pth (string->path pth)))
+  (if (not (extra-build-directory))
+      pth*
+      (let ()
+        (define primary-parts (explode-path (plt-build-directory)))
+        (define extra-parts (explode-path (extra-build-directory)))
+        (define pth-parts (explode-path pth*))
+        (define plen (length primary-parts))
+        (if (and (>= (length pth-parts) plen)
+                 (equal? (for/list ([p (in-list pth-parts)]
+                                    [_ (in-range plen)])
+                           p)
+                         primary-parts)
+                 (not (file-exists? pth*))
+                 (not (directory-exists? pth*)))
+            (let ([relocated (apply build-path
+                                    (append extra-parts
+                                            (list-tail pth-parts plen)))])
+              (if (or (file-exists? relocated) (directory-exists? relocated))
+                  relocated
+                  pth*))
+            pth*))))
+
 (define (revision-log-dir rev)
   (build-path (revision-dir rev) "logs"))
 
@@ -141,6 +167,7 @@
  [future-record-path (exact-nonnegative-integer? . -> . path?)]
  [current-make-timeout-seconds (parameter/c exact-nonnegative-integer?)]
  [current-make-install-timeout-seconds (parameter/c exact-nonnegative-integer?)]
+ [relocate-build-path (path-string? . -> . path?)]
  [revision-dir (exact-nonnegative-integer? . -> . path?)]
  [revision-commit-msg (exact-nonnegative-integer? . -> . path?)]
  [revision-log-dir (exact-nonnegative-integer? . -> . path?)]

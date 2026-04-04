@@ -1077,6 +1077,7 @@ in.}
     (with-handlers ([(lambda (x)
                        (regexp-match #rx"No cache available" (exn-message x)))
                      (lambda (x)
+                       (eprintf "show-revision: No cache for rev ~a: ~a\n" rev (exn-message x))
                        (rev-not-found log-dir rev))])
       (render-logs/dir log-dir #:show-commit-msg? #t))))
 

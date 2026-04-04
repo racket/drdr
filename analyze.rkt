@@ -264,7 +264,7 @@
   (define log-dir (revision-log-dir rev))
   (define analyze-dir (revision-analyze-dir rev))
   (define the-analyze-path
-    ((rebase-path log-dir analyze-dir) pth))
+    ((rebase-path log-dir analyze-dir) (relocate-build-path pth)))
   (if dir?
       (build-path the-analyze-path "index.analyze")
       (path-add-suffix the-analyze-path ".analyze")))
