@@ -19,6 +19,7 @@
          "path-utils.rkt"
          "cache.rkt"
          "analyze.rkt"
+         "make-archive-lib.rkt"
          "render.rkt")
 
 ;; --- Synthetic data setup ---
@@ -271,7 +272,32 @@
                                (dispatch-request (format "http://localhost/101/~a" test-file-path)))
                              (define body (response-body resp))
                              (check-regexp-match #rx"file-history" body)
-                             (check-regexp-match #rx"All results for this file" body))))))
+                             (check-regexp-match #rx"All results for this file" body))))
+
+    (test-case "file history page reads archived revisions correctly"
+      ;; Regression test: archived revisions used to show as "Pending" because
+      ;; show-file-history called file-exists? on the analyze and "analyzed"
+      ;; marker files, which fails after archiving deletes them. The fix is to
+      ;; use read-cache* which falls through to the archive.
+      (call-with-test-data (lambda ()
+                             ;; Archive revs 101, 102, 103 (101 is success,
+                             ;; 102 is failure, 103 is timeout). Rev 100 is
+                             ;; skipped because make-archive doesn't archive
+                             ;; multiples of 100.
+                             (make-archive 101)
+                             (make-archive 102)
+                             (make-archive 103)
+                             (define resp
+                               (dispatch-request
+                                (format "http://localhost/file-history/~a" test-file-path)))
+                             (check-equal? (response-code resp) 200)
+                             (define body (response-body resp))
+                             ;; Archived revisions must show their real status,
+                             ;; not "Pending".
+                             (check-regexp-match #rx"Success" body)
+                             (check-regexp-match #rx"Failure \\+ Stderr" body)
+                             (check-regexp-match #rx"Timeout" body)
+                             (check-false (regexp-match? #rx"Pending" body)))))))
 
 (module+ test
   (require rackunit/text-ui)
