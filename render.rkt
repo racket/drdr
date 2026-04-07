@@ -1215,10 +1215,10 @@ in.}
   (define page-results
     (map (lambda (rev)
            (define pth (rev-analyze-path rev))
-           (define r (and (file-exists? pth) (read-cache* pth)))
+           (define r (read-cache* pth))
            (define log-pth (rev-log-path rev))
-           (define log (and r (file-exists? log-pth) (read-cache* log-pth)))
-           (define analyzed? (file-exists? (build-path (revision-dir rev) "analyzed")))
+           (define log (and r (read-cache* log-pth)))
+           (define analyzed? (and (read-cache* (build-path (revision-dir rev) "analyzed")) #t))
            (list rev (and r (rendering? r) r) log analyzed?))
          page-revs))
   (define history-url (format "/file-history/~a" file-path-str))
