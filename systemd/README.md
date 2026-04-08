@@ -4,12 +4,13 @@ This replaces the `good-init.sh` shell-script supervisor with systemd.
 
 ## Architecture
 
-DrDr has two services:
+DrDr has two services and an auto-restart watcher:
 
-- **drdr-main** -- The CI loop. Monitors the git repo for new commits, checks out code, builds, runs tests, and analyzes results. Exits after processing each revision; systemd restarts it automatically.
+- **drdr-main** -- The CI loop. Monitors the git repo for new commits, checks out code, builds, runs tests, and analyzes results. Exits after processing each revision; systemd restarts it automatically. On each restart, runs `git pull origin master` so DrDr code updates land between cycles.
 - **drdr-render** -- Web server on port 9000. Serves test results from the filesystem. Runs continuously.
+- **drdr-render-watch.path** + **drdr-render-restart.service** -- A path unit that watches `/opt/svn/drdr/.git/refs/heads/master` and restarts drdr-render whenever main's `git pull` brings in a new commit. This way render stays in sync with the code without manual intervention.
 
-Both run as user `jay`. They communicate via the shared filesystem under `/opt/plt/builds/`, not via IPC or sockets.
+The services run as user `jay`. They communicate via the shared filesystem under `/opt/plt/builds/`, not via IPC or sockets.
 
 ### What systemd provides over good-init.sh
 
@@ -87,6 +88,10 @@ cd /opt/svn/drdr
 
 ### After code changes (git pull)
 
+For most code changes, **no manual deploy is needed**. drdr-main runs `git pull` on each restart (between revisions), and drdr-render-watch.path automatically restarts drdr-render when the master ref changes.
+
+For unit file changes (or to force an immediate restart), use:
+
 ```sh
 cd /opt/svn/drdr
 git pull
@@ -130,6 +135,10 @@ cd /opt/svn/drdr
 ### drdr.target
 
 Groups both services. Uses `Wants=` (not `Requires=`) so render keeps running when main restarts (which happens after every revision).
+
+### drdr-render-watch.path / drdr-render-restart.service
+
+The path unit watches `/opt/svn/drdr/.git/refs/heads/master`. Git only updates this file when `git pull` actually fetches new commits, so the path unit fires exactly when there's a code change. It triggers `drdr-render-restart.service`, a oneshot that runs `systemctl restart drdr-render.service`. Both run as system units (root) so no sudo or polkit configuration is needed.
 
 ## Troubleshooting
 
