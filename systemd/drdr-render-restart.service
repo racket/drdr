@@ -1,0 +1,7 @@
+[Unit]
+Description=Restart drdr-render after master ref changes
+Requisite=drdr-render.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart drdr-render.service

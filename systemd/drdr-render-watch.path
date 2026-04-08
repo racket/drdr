@@ -1,0 +1,10 @@
+[Unit]
+Description=Watch drdr master ref for changes
+After=drdr-main.service
+
+[Path]
+PathChanged=/opt/svn/drdr/.git/refs/heads/master
+Unit=drdr-render-restart.service
+
+[Install]
+WantedBy=multi-user.target

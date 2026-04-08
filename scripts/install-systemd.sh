@@ -212,14 +212,17 @@ echo "Stopping existing DrDr services (if any)..."
 sudo systemctl stop drdr.target 2>/dev/null || true
 sudo systemctl stop drdr-main.service 2>/dev/null || true
 sudo systemctl stop drdr-render.service 2>/dev/null || true
+sudo systemctl stop drdr-render-watch.path 2>/dev/null || true
 
 # Disable old services
 sudo systemctl disable drdr-main.service 2>/dev/null || true
 sudo systemctl disable drdr-render.service 2>/dev/null || true
+sudo systemctl disable drdr-render-watch.path 2>/dev/null || true
 sudo systemctl disable drdr.target 2>/dev/null || true
 
 # Remove old unit file links (only if they are symlinks)
-for unit in drdr-main.service drdr-render.service drdr.target; do
+for unit in drdr-main.service drdr-render.service drdr.target \
+            drdr-render-watch.path drdr-render-restart.service; do
     target="/etc/systemd/system/$unit"
     if [ -L "$target" ]; then
         sudo rm -f "$target"
@@ -234,6 +237,8 @@ echo "Linking unit files from $REPO/systemd/..."
 sudo systemctl link "$REPO/systemd/drdr-main.service"
 sudo systemctl link "$REPO/systemd/drdr-render.service"
 sudo systemctl link "$REPO/systemd/drdr.target"
+sudo systemctl link "$REPO/systemd/drdr-render-watch.path"
+sudo systemctl link "$REPO/systemd/drdr-render-restart.service"
 
 # Reload
 sudo systemctl daemon-reload
@@ -243,12 +248,14 @@ echo ""
 echo "Enabling services..."
 sudo systemctl enable drdr-main.service
 sudo systemctl enable drdr-render.service
+sudo systemctl enable drdr-render-watch.path
 
 # Start
 echo ""
 echo "Starting services..."
 sudo systemctl start drdr-main.service
 sudo systemctl start drdr-render.service
+sudo systemctl start drdr-render-watch.path
 
 # Status
 echo ""

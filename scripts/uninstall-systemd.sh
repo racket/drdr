@@ -9,16 +9,19 @@ echo "Stopping services..."
 sudo systemctl stop drdr.target 2>/dev/null || true
 sudo systemctl stop drdr-main.service 2>/dev/null || true
 sudo systemctl stop drdr-render.service 2>/dev/null || true
+sudo systemctl stop drdr-render-watch.path 2>/dev/null || true
 
 # Disable
 echo "Disabling services..."
 sudo systemctl disable drdr-main.service 2>/dev/null || true
 sudo systemctl disable drdr-render.service 2>/dev/null || true
+sudo systemctl disable drdr-render-watch.path 2>/dev/null || true
 sudo systemctl disable drdr.target 2>/dev/null || true
 
 # Remove unit file links (only if they are symlinks)
 echo "Removing unit file links..."
-for unit in drdr-main.service drdr-render.service drdr.target; do
+for unit in drdr-main.service drdr-render.service drdr.target \
+            drdr-render-watch.path drdr-render-restart.service; do
     target="/etc/systemd/system/$unit"
     if [ -L "$target" ]; then
         sudo rm -f "$target"
