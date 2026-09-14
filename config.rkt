@@ -15,7 +15,7 @@
 (vncviewer-path "/usr/bin/vncviewer")
 (current-make-install-timeout-seconds (* 5 60 60))
 (current-make-timeout-seconds (* 5 60 60))                                       
-(current-subprocess-timeout-seconds 90)
+(current-subprocess-timeout-seconds 180)
 (current-monitoring-interval-seconds 60)
 (number-of-cpus 18)
 
