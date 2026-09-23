@@ -46,7 +46,19 @@
       pth-string
       (path->string pth-string)))
 
+;; If `pth` is `root` or lies under it, the path elements below `root`;
+;; otherwise #f.
+(define (path-prefix-split pth root)
+  (define root-parts (explode-path root))
+  (define pth-parts (explode-path pth))
+  (define root-len (length root-parts))
+  (and ((length pth-parts) . >= . root-len)
+       (equal? (for/list ([p (in-list pth-parts)] [_ (in-range root-len)]) p)
+               root-parts)
+       (list-tail pth-parts root-len)))
+
 (provide/contract
+ [path-prefix-split (path-string? path-string? . -> . (or/c false/c (listof path?)))]
  [current-temporary-directory (parameter/c (or/c false/c path-string?))]
  [safely-delete-directory (path-string? . -> . void)]
  [directory-list->directory-list* ((listof path?) . -> . (listof path?))]
@@ -55,3 +67,15 @@
  [make-parent-directory (path-string? . -> . void)]
  [rebase-path (path-string? path-string? . -> . (path-string? . -> . path?))]
  [path->string* (path-string? . -> . string?)])
+
+(module+ test
+  (require rackunit)
+
+  (check-equal? (path-prefix-split "/opt/plt/builds/73400/logs" "/opt/plt/builds")
+                (map string->path '("73400" "logs")))
+  (check-equal? (path-prefix-split "/extra/builds/55389/logs" "/extra/builds")
+                (map string->path '("55389" "logs")))
+  (check-equal? (path-prefix-split "/opt/plt/builds" "/opt/plt/builds") '())
+  ;; a different prefix of the same length does not match
+  (check-false (path-prefix-split "/opt/plt/other/73400" "/opt/plt/builds"))
+  (check-false (path-prefix-split "/opt/plt" "/opt/plt/builds")))
