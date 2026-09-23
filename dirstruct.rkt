@@ -113,11 +113,16 @@
 (define (revision-commit-msg rev)
   (build-path (revision-dir rev) "commit-msg"))
 
+;; A build lives under the primary build directory until it ages out to
+;; the extra one, and the two roots need not have the same depth.
 (define (path->revision pth)
-  (define builds (explode-path (plt-build-directory)))
-  (define builds-len (length builds))
-  (define pths (explode-path pth))
-  (string->number (path->string* (list-ref pths builds-len))))
+  (define (revision-under root)
+    (define below (and root (path-prefix-split pth root)))
+    (and (pair? below)
+         (string->number (path->string* (car below)))))
+  (or (revision-under (plt-build-directory))
+      (revision-under (extra-build-directory))
+      (error 'path->revision "no revision in ~e" pth)))
 
 (define (revision-archive rev)
   (build-path (revision-dir rev) "archive.db"))
@@ -178,3 +183,26 @@
  [revision-archive (exact-nonnegative-integer? . -> . path?)]
  [path->revision (path-string? . -> . exact-nonnegative-integer?)]
  [plt-new-pushes-file (-> path-string?)])
+
+(module+ test
+  (require rackunit)
+
+  (define-syntax-rule (with-roots primary extra body ...)
+    (parameterize ([plt-directory primary] [extra-build-directory extra])
+      body ...))
+
+  ;; The production layout: the extra root is one element shorter.
+  (with-roots "/opt/plt" "/extra/builds"
+    (check-equal? (path->revision "/opt/plt/builds/73400/logs/pkgs/base") 73400)
+    (check-equal? (path->revision "/extra/builds/55389/logs") 55389)
+    (check-equal? (path->revision "/extra/builds/55389/logs/pkgs/base") 55389)
+    (check-exn exn:fail? (lambda () (path->revision "/elsewhere/55389/logs")))
+    (check-exn exn:fail? (lambda () (path->revision "/opt/plt/builds"))))
+
+  ;; An extra root deeper than the primary one.
+  (with-roots "/opt/plt" "/mnt/a/b/c/builds"
+    (check-equal? (path->revision "/mnt/a/b/c/builds/50001/logs") 50001))
+
+  (with-roots "/opt/plt" #f
+    (check-equal? (path->revision "/opt/plt/builds/73400/logs") 73400)
+    (check-exn exn:fail? (lambda () (path->revision "/extra/builds/55389/logs")))))
