@@ -1,7 +1,8 @@
 #lang racket/base
 (require racket/bool
          racket/contract/base
-         "path-utils.rkt")
+         "path-utils.rkt"
+         "not-cached.rkt")
 
 (define number-of-cpus
   (make-parameter 1))
@@ -122,7 +123,7 @@
          (string->number (path->string* (car below)))))
   (or (revision-under (plt-build-directory))
       (revision-under (extra-build-directory))
-      (error 'path->revision "no revision in ~e" pth)))
+      (raise-not-cached "path->revision: no revision in ~e" pth)))
 
 (define (revision-archive rev)
   (build-path (revision-dir rev) "archive.db"))
@@ -196,7 +197,7 @@
     (check-equal? (path->revision "/opt/plt/builds/73400/logs/pkgs/base") 73400)
     (check-equal? (path->revision "/extra/builds/55389/logs") 55389)
     (check-equal? (path->revision "/extra/builds/55389/logs/pkgs/base") 55389)
-    (check-exn exn:fail? (lambda () (path->revision "/elsewhere/55389/logs")))
+    (check-exn exn:fail:not-cached? (lambda () (path->revision "/elsewhere/55389/logs")))
     (check-exn exn:fail? (lambda () (path->revision "/opt/plt/builds"))))
 
   ;; An extra root deeper than the primary one.

@@ -2,7 +2,8 @@
 (require racket/port
          racket/file
          racket/contract/base
-         "path-utils.rkt")
+         "path-utils.rkt"
+         "not-cached.rkt")
 
 ; (symbols 'always 'cache 'no-cache)
 (define cache/file-mode (make-parameter 'cache))
@@ -19,7 +20,7 @@
          ([exn:fail?
            (lambda (x)
              (case mode
-               [(no-cache) (error 'cache/file "No cache available: ~a" pth)]
+               [(no-cache) (raise-not-cached "cache/file: No cache available: ~a" pth)]
                [(cache always)
                 #;(printf "cache/file: running ~S for ~a\n" thnk pth)
                 (recompute!)]))])
@@ -34,7 +35,13 @@
   (void))
 
 (require "archive.rkt"
-         "dirstruct.rkt")
+         "dirstruct.rkt"
+         "notify.rkt")
+
+;; A lookup whose data is absent is an ordinary miss; anything else, such
+;; as a contract violation or a malformed archive, is a bug to report.
+(define (miss-on-failure who pth thunk)
+  (swallow who pth thunk #:expected? not-cached?))
 
 ;; `pth` is relative to where the build lives now, which need not be where
 ;; it lived when its archive was created.
@@ -56,28 +63,31 @@
 (define (cached-directory-list* dir-pth)
   (if (directory-exists? dir-pth)
       (directory-list* dir-pth)
-      (or (with-handlers ([exn:fail? (lambda _ #f)]) (consult-archive/directory-list* dir-pth))
-          (error 'cached-directory-list* "Directory list is not cached: ~e" dir-pth))))
+      (or (miss-on-failure 'cached-directory-list* dir-pth
+                           (lambda () (consult-archive/directory-list* dir-pth)))
+          (raise-not-cached "cached-directory-list*: Directory list is not cached: ~e" dir-pth))))
 
 (define (cached-directory-exists? dir-pth)
   (if (file-exists? dir-pth)
       #f
       (or (directory-exists? dir-pth)
-          (with-handlers ([exn:fail? (lambda _ #f)]) (consult-archive/directory-exists? dir-pth)))))
+          (miss-on-failure 'cached-directory-exists? dir-pth
+                           (lambda () (consult-archive/directory-exists? dir-pth))))))
 
 (define (read-cache pth)
   (if (file-exists? pth)
       (file->value pth)
-      (or (with-handlers ([exn:fail? (lambda _ #f)]) (consult-archive pth))
-          (error 'read-cache "File is not cached: ~e" pth))))
+      (or (miss-on-failure 'read-cache pth (lambda () (consult-archive pth)))
+          (raise-not-cached "read-cache: File is not cached: ~e" pth))))
 (define (read-cache* pth)
-  (with-handlers ([exn:fail? (lambda (x) #f)])
-    (read-cache pth)))
+  ;; also reports a corrupt cache file, which `file->value` rejects
+  (miss-on-failure 'read-cache* pth (lambda () (read-cache pth))))
 (define (write-cache! pth v)
   (write-to-file* v pth))
 (define (delete-cache! pth)
-  (with-handlers ([exn:fail? void])
-    (delete-file pth)))
+  (swallow 'delete-cache! pth (lambda () (delete-file pth))
+           #:expected? exn:fail:filesystem?)
+  (void))
 
 (provide/contract
  [cache/file-mode (parameter/c (symbols 'always 'cache 'no-cache))]
@@ -89,3 +99,24 @@
  [read-cache* (path-string? . -> . any/c)]
  [write-cache! (path-string? any/c . -> . void)]
  [delete-cache! (path-string? . -> . void)])
+
+(module+ test
+  (require rackunit
+           (submod "notify.rkt" test-support))
+
+  (define (warnings-for thunk)
+    (warnings-during (lambda () (check-false (miss-on-failure 'test "/x" thunk)))))
+
+  ;; ordinary misses are quiet
+  (check-equal? (warnings-for (lambda () (call-with-input-file "/no/such/file" read))) '())
+  (check-equal? (warnings-for (lambda () (raise-not-cached "~e is not in the archive" "/x")))
+                '())
+
+  ;; a bug is reported however it is worded, including the contract
+  ;; violation `path->revision` used to raise for every archived build
+  (check-equal? (length (warnings-for (lambda () (error 'oops "is not in the archive")))) 1)
+  (check-equal? (length (warnings-for
+                         (lambda ()
+                           (raise (exn:fail:contract "path->revision: broke its own contract"
+                                                     (current-continuation-marks))))))
+                1))

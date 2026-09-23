@@ -10,6 +10,7 @@
          "list-count.rkt"
          "notify.rkt"
          "cache.rkt"
+         "not-cached.rkt"
          "dirstruct.rkt"
          "status.rkt"
          "metadata.rkt"
@@ -147,14 +148,19 @@
         ["nobody" "drdr-nobody"]
         [x x])))
   (define committer
-    (with-handlers ([exn:fail? (lambda (x) #f)])
-      (scm-commit-author 
-       (read-cache*
-        (revision-commit-msg cur-rev)))))
+    (swallow 'notify/committer cur-rev
+             #:expected? not-cached?
+             (lambda ()
+               (scm-commit-author 
+                (read-cache
+                 (revision-commit-msg cur-rev))))))
   (define diff
-    (with-handlers ([exn:fail? (lambda (x) #t)])
-      (define old (rev->responsible-ht (previous-rev)))
-      (responsible-ht-difference old responsible-ht)))
+    (swallow 'notify/diff (previous-rev)
+             #:expected? not-cached?
+             #:on-fail (lambda () #t)
+             (lambda ()
+               (define old (rev->responsible-ht (previous-rev)))
+               (responsible-ht-difference old responsible-ht))))
   (define include-committer?
     (and ; The committer can be found
      committer 
@@ -308,16 +314,16 @@
             (define changed?
               (if (and (previous-rev)
                        (not random?))
-                  (with-handlers ([exn:fail? 
-                                   ;; This #f means that new files are
-                                   ;; NOT considered changed
-                                   (lambda (x) #f)])
-                    (define prev-log-pth
-                      ((rebase-path (revision-log-dir (current-rev)) 
-                                    (revision-log-dir (previous-rev)))
-                       log-pth))
-                    (log-different? output-log
-                                    (status-output-log (read-cache prev-log-pth))))
+                  ;; The #f fallback means that new files are NOT considered changed.
+                  (swallow 'analyze/changed? log-pth
+                           #:expected? not-cached?
+                           (lambda ()
+                             (define prev-log-pth
+                               ((rebase-path (revision-log-dir (current-rev)) 
+                                             (revision-log-dir (previous-rev)))
+                                log-pth))
+                             (log-different? output-log
+                                             (status-output-log (read-cache prev-log-pth)))))
                   #f))
             (define responsible 
               (or (calculate-responsible output-log)
@@ -385,10 +391,12 @@
                  
                  (or
                   (and committer? 
-                       (with-handlers ([exn:fail? (lambda (x) #f)])
-                         (scm-commit-author
-                          (read-cache 
-                           (revision-commit-msg (current-rev))))))
+                       (swallow 'analyze/commit-author (current-rev)
+                                #:expected? not-cached?
+                                (lambda ()
+                                  (scm-commit-author
+                                   (read-cache 
+                                    (revision-commit-msg (current-rev)))))))
                   "")
                  
                  empty

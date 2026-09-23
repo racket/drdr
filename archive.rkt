@@ -5,7 +5,9 @@
          racket/local
          racket/match
          racket/contract/base
-         "path-utils.rkt")
+         "path-utils.rkt"
+         "notify.rkt"
+         "not-cached.rkt")
 
 (define (value->bytes v)
   (with-output-to-bytes (lambda () (write v))))
@@ -55,7 +57,7 @@
 ;; lives under a different root, so callers pass that root as `base`.
 (define (archive-extract-path archive-path p #:base [base #f])
   (define (not-in-archive)
-    (error 'archive-extract-path "~e is not in the archive" p))
+    (raise-not-cached "archive-extract-path: ~e is not in the archive" p))
   (define (bad-archive)
     (error 'archive-extract-path "~e is not a valid archive" archive-path))
   (call-with-input-file
@@ -116,8 +118,11 @@
 
 (define (archive-directory-exists? archive-path fp #:base [base #f])
   (define-values (dir? _)
-    (with-handlers ([exn:fail? (lambda (x) (values #f #f))])
-      (archive-extract-path archive-path fp #:base base)))
+    ;; a missing archive or entry means "no"; a malformed archive is a bug
+    (swallow 'archive-directory-exists? fp
+             (lambda () (archive-extract-path archive-path fp #:base base))
+             #:expected? not-cached?
+             #:on-fail (lambda () (values #f #f))))
   dir?)
 
 (define (archive-extract-to archive-file-path archive-inner-path to #:base [base #f])
