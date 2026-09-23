@@ -123,6 +123,21 @@
                       (regexp-replace** ([pat subst] ...) s)
                       subst0)]))
 
+;; Scrub machine- and push-specific paths from captured output, so that a
+;; log changes only when the test's behavior does. The placeholder replaces
+;; the last element of `rev-dir`, the build's directory, and output matches
+;; only where the whole directory appears, so other occurrences of the push
+;; number's digits, such as in a git checksum, survive.
+(define (scrub-output s rev-dir tmp home cwd)
+  (define rev-dir/scrubbed
+    (apply build-path (append (drop-right (explode-path rev-dir) 1)
+                              (list "<current-rev>"))))
+  (regexp-replace** ([(path->string rev-dir) (path->string rev-dir/scrubbed)]
+                     [tmp "<tmp>"]
+                     [home "<home>"]
+                     [(path->string cwd) "<cwd>"])
+                    s))
+
 (define (run/collect/wait/log log-path command 
                               #:timeout timeout 
                               #:env env
@@ -133,16 +148,12 @@
    (lambda ()
      (notify! "No cache: ~a" log-path)
 
-     (define rev (number->string (current-rev)))
+     (define rev-dir (revision-dir (current-rev)))
      (define home (hash-ref env "HOME"))
      (define tmp (hash-ref env "TMPDIR"))
-     (define cwd (path->string (current-directory)))
+     (define cwd (current-directory))
      (define (rewrite s)
-       (regexp-replace** ([rev "<current-rev>"]
-                          [tmp "<tmp>"]
-                          [home "<home>"]
-                          [cwd "<cwd>"])
-                         s))
+       (scrub-output s rev-dir tmp home cwd))
      
      (set! ran? #t)
      (rewrite-status
@@ -168,3 +179,22 @@
                 #:timeout exact-nonnegative-integer? 
                 (listof string?) 
                 . -> . boolean?)])
+
+(module+ test
+  (require rackunit)
+
+  ;; the callers' `cwd` ends in a separator, as `(current-directory)` does
+  (define (scrub s)
+    (scrub-output s (string->path "/opt/plt/builds/73506")
+                  "/tmp/x/" "/home/jay"
+                  (string->path "/opt/plt/builds/73506/trunk/")))
+
+  (check-equal? (scrub "/opt/plt/builds/73506/logs/pkgs/base")
+                "/opt/plt/builds/<current-rev>/logs/pkgs/base")
+  (check-equal? (scrub "/opt/plt/builds/73506/trunk/racket") "<cwd>racket")
+  (check-equal? (scrub "/tmp/x/foo") "<tmp>foo")
+  (check-equal? (scrub "/home/jay/.racket") "<home>/.racket")
+  ;; expeditor's checksum on push 73506, and a bare mention of the number
+  (check-equal? (scrub "65e20a410bdc5f09c0682a1bb57cac2b68d73506")
+                "65e20a410bdc5f09c0682a1bb57cac2b68d73506")
+  (check-equal? (scrub "ran 73506 tests") "ran 73506 tests"))
