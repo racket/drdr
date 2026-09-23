@@ -2,7 +2,8 @@
 (require racket/port
          racket/file
          racket/contract/base
-         "path-utils.rkt")
+         "path-utils.rkt"
+         "not-cached.rkt")
 
 ; (symbols 'always 'cache 'no-cache)
 (define cache/file-mode (make-parameter 'cache))
@@ -19,7 +20,7 @@
          ([exn:fail?
            (lambda (x)
              (case mode
-               [(no-cache) (error 'cache/file "No cache available: ~a" pth)]
+               [(no-cache) (raise-not-cached "cache/file: No cache available: ~a" pth)]
                [(cache always)
                 #;(printf "cache/file: running ~S for ~a\n" thnk pth)
                 (recompute!)]))])
@@ -57,7 +58,7 @@
   (if (directory-exists? dir-pth)
       (directory-list* dir-pth)
       (or (with-handlers ([exn:fail? (lambda _ #f)]) (consult-archive/directory-list* dir-pth))
-          (error 'cached-directory-list* "Directory list is not cached: ~e" dir-pth))))
+          (raise-not-cached "cached-directory-list*: Directory list is not cached: ~e" dir-pth))))
 
 (define (cached-directory-exists? dir-pth)
   (if (file-exists? dir-pth)
@@ -69,7 +70,7 @@
   (if (file-exists? pth)
       (file->value pth)
       (or (with-handlers ([exn:fail? (lambda _ #f)]) (consult-archive pth))
-          (error 'read-cache "File is not cached: ~e" pth))))
+          (raise-not-cached "read-cache: File is not cached: ~e" pth))))
 (define (read-cache* pth)
   (with-handlers ([exn:fail? (lambda (x) #f)])
     (read-cache pth)))

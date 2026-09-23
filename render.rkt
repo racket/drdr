@@ -14,6 +14,7 @@
          "diff.rkt"
          "list-count.rkt"
          "cache.rkt"
+         "not-cached.rkt"
          (except-in "dirstruct.rkt"
                     revision-trunk-dir)
          "status.rkt"
@@ -1013,8 +1014,7 @@ in.}
                                     (td ([class "author"]) ,committer)))
                              (parameterize ([current-rev rev])
                                (with-handlers 
-                                   ([(lambda (x)
-                                       (regexp-match #rx"No cache available" (exn-message x)))
+                                   ([exn:fail:not-cached?
                                      (lambda (x)
                                        (no-rendering-row))])
                                  ;; XXX One function to generate
@@ -1074,8 +1074,7 @@ in.}
   (define log-dir (revision-log-dir rev))
   (parameterize ([current-rev rev]
                  [previous-rev (find-previous-rev rev)])
-    (with-handlers ([(lambda (x)
-                       (regexp-match #rx"No cache available" (exn-message x)))
+    (with-handlers ([exn:fail:not-cached?
                      (lambda (x)
                        (eprintf "show-revision: No cache for rev ~a: ~a\n" rev (exn-message x))
                        (rev-not-found log-dir rev))])
@@ -1140,8 +1139,7 @@ in.}
         (define log-pth
           (apply build-path log-dir path-to-file))
         (match 
-            (with-handlers ([(lambda (x)
-                               (regexp-match #rx"No cache available" (exn-message x)))
+            (with-handlers ([exn:fail:not-cached?
                              (lambda (x)
                                #f)])
               (log-rendering log-pth))
@@ -1161,15 +1159,13 @@ in.}
     (if (member "" path-to-file)
         (local [(define dir-pth
                   (apply build-path log-dir (all-but-last path-to-file)))]
-          (with-handlers ([(lambda (x)
-                             (regexp-match #rx"No cache available" (exn-message x)))
+          (with-handlers ([exn:fail:not-cached?
                            (lambda (x)
                              (dir-not-found dir-pth))])
             (render-logs/dir dir-pth)))
         (local [(define file-pth
                   (apply build-path log-dir path-to-file))]
-          (with-handlers ([(lambda (x)
-                             (regexp-match #rx"No cache available" (exn-message x)))
+          (with-handlers ([exn:fail:not-cached?
                            (lambda (x)
                              (file-not-found file-pth))])
             (render-log file-pth))))))
@@ -1302,16 +1298,14 @@ in.}
 
 (define (show-diff req r1 r2 f)
   (define f1 (apply build-path (revision-log-dir r1) f))
-  (with-handlers ([(lambda (x)
-                     (regexp-match #rx"File is not cached" (exn-message x)))
+  (with-handlers ([exn:fail:not-cached?
                    (lambda (x)
                      ;; XXX Make a little nicer
                      (parameterize ([current-rev r1])
                        (file-not-found f1)))])
     (define l1 (status-output-log (read-cache f1)))
     (define f2 (apply build-path (revision-log-dir r2) f))
-    (with-handlers ([(lambda (x)
-                       (regexp-match #rx"File is not cached" (exn-message x)))
+    (with-handlers ([exn:fail:not-cached?
                      (lambda (x)
                        ;; XXX Make a little nicer
                        (parameterize ([current-rev r2])

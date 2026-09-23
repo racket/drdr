@@ -5,7 +5,8 @@
          racket/local
          racket/match
          racket/contract/base
-         "path-utils.rkt")
+         "path-utils.rkt"
+         "not-cached.rkt")
 
 (define (value->bytes v)
   (with-output-to-bytes (lambda () (write v))))
@@ -55,7 +56,7 @@
 ;; lives under a different root, so callers pass that root as `base`.
 (define (archive-extract-path archive-path p #:base [base #f])
   (define (not-in-archive)
-    (error 'archive-extract-path "~e is not in the archive" p))
+    (raise-not-cached "archive-extract-path: ~e is not in the archive" p))
   (define (bad-archive)
     (error 'archive-extract-path "~e is not a valid archive" archive-path))
   (call-with-input-file
