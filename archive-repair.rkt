@@ -13,6 +13,7 @@
                 #:args (n) (string->number n)))
 
 (when (file-exists? (revision-archive rev))
-  (archive-extract-to (revision-archive rev) (revision-dir rev) (revision-dir rev))
+  (archive-extract-to (revision-archive rev) (revision-dir rev) (revision-dir rev)
+                      #:base (revision-dir rev))
   (delete-file (revision-archive rev))
   (make-archive rev))

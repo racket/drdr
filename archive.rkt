@@ -50,8 +50,10 @@
     (if (? v) v
         (err))))
 
-(define (archive-extract-path archive-path p)
-  (define ps (explode-path p))
+;; `p` names an entry relative to `base`, which defaults to the root the
+;; archive recorded when it was created. A build that has moved since then
+;; lives under a different root, so callers pass that root as `base`.
+(define (archive-extract-path archive-path p #:base [base #f])
   (define (not-in-archive)
     (error 'archive-extract-path "~e is not in the archive" p))
   (define (bad-archive)
@@ -64,12 +66,10 @@
           (lambda ()
             (define root-string (read/? fport string? bad-archive))
             (define root (string->path root-string))
-            (define roots (explode-path root))
-            (define root-len (length roots))
-            (unless (root-len . <= . (length ps))
+            (define ps-roots (path-prefix-split p (or base root)))
+            (unless ps-roots
               (not-in-archive))
-            (local [(define ps-roots (list-tail ps root-len))
-                    (define root-table-bytes (read/? fport bytes? bad-archive))
+            (local [(define root-table-bytes (read/? fport bytes? bad-archive))
                     (define root-table (bytes->value root-table-bytes hash? bad-archive))
                     (define heap-start (file-position fport))
                     (define (extract-bytes t p)
@@ -99,58 +99,61 @@
           (lambda ()
             (close-input-port fport))))))
 
-(define (archive-extract-file archive-path fp)
-  (define-values (dir? bs) (archive-extract-path archive-path fp))
+(define (archive-extract-file archive-path fp #:base [base #f])
+  (define-values (dir? bs) (archive-extract-path archive-path fp #:base base))
   (if dir?
     (error 'archive-extract-file "~e is not a file" fp)
     bs))
 
-(define (archive-directory-list archive-path fp)
+(define (archive-directory-list archive-path fp #:base [base #f])
   (define (bad-archive)
     (error 'archive-directory-list "~e is not a valid archive" archive-path))
-  (define-values (dir? bs) (archive-extract-path archive-path fp))
+  (define-values (dir? bs) (archive-extract-path archive-path fp #:base base))
   (if dir?
     (for/list ([k (in-hash-keys (bytes->value bs hash? bad-archive))])
       (build-path k))
     (error 'archive-directory-list "~e is not a directory" fp)))
 
-(define (archive-directory-exists? archive-path fp)
+(define (archive-directory-exists? archive-path fp #:base [base #f])
   (define-values (dir? _)
     (with-handlers ([exn:fail? (lambda (x) (values #f #f))])
-      (archive-extract-path archive-path fp)))
+      (archive-extract-path archive-path fp #:base base)))
   dir?)
 
-(define (archive-extract-to archive-file-path archive-inner-path to)
+(define (archive-extract-to archive-file-path archive-inner-path to #:base [base #f])
   (printf "~a " to)
   (cond
-    [(archive-directory-exists? archive-file-path archive-inner-path)
+    [(archive-directory-exists? archive-file-path archive-inner-path #:base base)
      (printf "D\n")
      (make-directory* to)
-     (for ([p (in-list (archive-directory-list archive-file-path archive-inner-path))])
+     (for ([p (in-list (archive-directory-list archive-file-path archive-inner-path
+                                               #:base base))])
        (archive-extract-to archive-file-path
                            (build-path archive-inner-path p)
-                           (build-path to p)))]
+                           (build-path to p)
+                           #:base base))]
     [else
      (printf "F\n")
      (unless (file-exists? to)
        (with-output-to-file to
          #:exists 'error
          (λ ()
-           (write-bytes (archive-extract-file archive-file-path archive-inner-path)))))]))
+           (write-bytes (archive-extract-file archive-file-path archive-inner-path
+                                              #:base base)))))]))
 
 (provide/contract
  [create-archive
   (-> path-string? path-string?
       void)]
  [archive-extract-to
-  (-> path-string? path-string? path-string?
-      void)]
+  (->* (path-string? path-string? path-string?) (#:base (or/c #f path-string?))
+       void)]
  [archive-extract-file
-  (-> path-string? path-string?
-      bytes?)]
+  (->* (path-string? path-string?) (#:base (or/c #f path-string?))
+       bytes?)]
  [archive-directory-list
-  (-> path-string? path-string?
-      (listof path?))]
+  (->* (path-string? path-string?) (#:base (or/c #f path-string?))
+       (listof path?))]
  [archive-directory-exists?
-  (-> path-string? path-string?
-      boolean?)])
+  (->* (path-string? path-string?) (#:base (or/c #f path-string?))
+       boolean?)])

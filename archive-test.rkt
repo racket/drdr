@@ -39,3 +39,20 @@
 (check-false (archive-directory-exists? archive (build-path (current-directory) "unknown")))
 (check-false (archive-directory-exists? archive (build-path (current-directory) "archive-test.rkt")))
 
+;; A path under a different root with the same number of elements must not
+;; resolve; stripping elements without comparing them used to read an entry
+;; from the wrong level.
+(define cwd-parts (explode-path (current-directory)))
+(define bogus-root
+  (apply build-path (car cwd-parts)
+         (for/list ([_ (in-list (cdr cwd-parts))] [n (in-naturals)])
+           (string->path-element (format "bogus~a" n)))))
+(check-false (archive-directory-exists? archive (build-path bogus-root "static")))
+(check-exn #rx"not in the archive"
+           (lambda () (archive-extract-file archive (build-path bogus-root "archive-test.rkt"))))
+
+;; With `#:base`, a path under the new root finds the entry the archive
+;; recorded under the old one.
+(check-equal? (archive-extract-file archive (build-path bogus-root "archive-test.rkt")
+                                    #:base bogus-root)
+              (file->bytes "archive-test.rkt"))

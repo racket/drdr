@@ -36,22 +36,22 @@
 (require "archive.rkt"
          "dirstruct.rkt")
 
+;; `pth` is relative to where the build lives now, which need not be where
+;; it lived when its archive was created.
 (define (consult-archive pth)
   (define rev (path->revision pth))
-  (define archive-path (revision-archive rev))
   (define file-bytes
-    (archive-extract-file archive-path pth))
+    (archive-extract-file (revision-archive rev) pth #:base (revision-dir rev)))
   (with-input-from-bytes file-bytes read))
 
 (define (consult-archive/directory-list* pth)
   (define rev (path->revision pth))
-  (define archive-path (revision-archive rev))
-  (directory-list->directory-list* (archive-directory-list archive-path pth)))
+  (directory-list->directory-list*
+   (archive-directory-list (revision-archive rev) pth #:base (revision-dir rev))))
 
 (define (consult-archive/directory-exists? pth)
   (define rev (path->revision pth))
-  (define archive-path (revision-archive rev))
-  (archive-directory-exists? archive-path pth))
+  (archive-directory-exists? (revision-archive rev) pth #:base (revision-dir rev)))
 
 (define (cached-directory-list* dir-pth)
   (if (directory-exists? dir-pth)
