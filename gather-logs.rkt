@@ -2,6 +2,8 @@
 (require racket/match
          "config.rkt"
          "cache.rkt"
+         "not-cached.rkt"
+         "notify.rkt"
          "replay.rkt"
          "status.rkt")
 
@@ -27,9 +29,11 @@
     (for ([rev (in-range start (add1 end))])
       (printf " ~a" rev) (flush-output)
       (define v
-        (with-handlers ([exn:fail? (λ (x) #f)])
-          (define p (format "/opt/plt/builds/~a/logs/~a" rev pth))
-          (read-cache p)))
+        (swallow 'gather-logs rev
+                 #:expected? not-cached?
+                 (lambda ()
+                   (define p (format "/opt/plt/builds/~a/logs/~a" rev pth))
+                   (read-cache p))))
       (with-output-to-file (build-path the-dir (format "~a.log" rev))
         (λ ()
           (match v
