@@ -31,19 +31,24 @@
         (if (file-exists? p) 1 0))
       0))
 
+;; Finding the baseline walks whole log trees. Until some revision reaches
+;; the threshold, look again at most every ten minutes, not on every render.
 (define log-file-baseline #f)
+(define log-file-baseline-checked -inf.0)
 (define (get-log-file-baseline)
   (or log-file-baseline
-      (let ()
-        (define builds (plt-build-directory))
-        (define revs
-          (sort (filter-map (compose string->number path->string)
-                            (directory-list builds))
-                >))
-        (for/or ([rev (in-list revs)])
-          (define c (count-log-files (revision-log-dir rev)))
-          (and (>= c 30000)
-               (begin (set! log-file-baseline c) c))))))
+      (and ((current-seconds) . >= . (+ log-file-baseline-checked (* 10 60)))
+           (let ()
+             (set! log-file-baseline-checked (current-seconds))
+             (define builds (plt-build-directory))
+             (define revs
+               (sort (filter-map (compose string->number path->string)
+                                 (directory-list builds))
+                     >))
+             (for/or ([rev (in-list revs)])
+               (define c (count-log-files (revision-log-dir rev)))
+               (and (>= c 30000)
+                    (begin (set! log-file-baseline c) c)))))))
 
 (define (base-path pth)
   (define rev (current-rev))
