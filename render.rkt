@@ -1378,6 +1378,15 @@ in.}
        => header-value]
       [else
        #"Unknown"]))
+  ;; Requests proxied through Cloudflare arrive from an edge address, so
+  ;; `request-client-ip` reports the edge instead of the original client.
+  (define client-ip
+    (cond
+      [(headers-assq* #"CF-Connecting-IP"
+                      (request-headers/raw req))
+       => (lambda (h) (bytes->string/utf-8 (header-value h) #\?))]
+      [else
+       (request-client-ip req)]))
   (cond
     [(regexp-match #"Googlebot" user-agent)
      (response/xexpr "Please, do not index.")]
@@ -1385,7 +1394,7 @@ in.}
      (printf "~a - ~a ~a\n"
              (url->string (request-uri req))
              user-agent
-	     (request-client-ip req))
+	     client-ip)
      (parameterize ([drdr-start-request (current-inexact-milliseconds)])
      (top-dispatch req))]))
 
