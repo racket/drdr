@@ -6,6 +6,7 @@
          racket/match
          racket/contract/base
          "path-utils.rkt"
+         "notify.rkt"
          "not-cached.rkt")
 
 (define (value->bytes v)
@@ -117,8 +118,11 @@
 
 (define (archive-directory-exists? archive-path fp #:base [base #f])
   (define-values (dir? _)
-    (with-handlers ([exn:fail? (lambda (x) (values #f #f))])
-      (archive-extract-path archive-path fp #:base base)))
+    ;; a missing archive or entry means "no"; a malformed archive is a bug
+    (swallow 'archive-directory-exists? fp
+             (lambda () (archive-extract-path archive-path fp #:base base))
+             #:expected? not-cached?
+             #:on-fail (lambda () (values #f #f))))
   dir?)
 
 (define (archive-extract-to archive-file-path archive-inner-path to #:base [base #f])
