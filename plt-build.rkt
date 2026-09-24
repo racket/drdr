@@ -18,18 +18,29 @@
          "sema.rkt"
          "scm.rkt")
 
+;; Settings that a package's info.rkt gives DrDr for some of its tests,
+;; keyed by normalized path (a directory path for a directory):
 ;; test-xvfb-paths: hash of normalized-path -> #t
 (define xvfb-paths (make-hash))
-(define xvfb-info-done (make-hash))
+;; test-command-prefixes: hash of normalized-path -> (listof string)
+(define command-prefixes (make-hash))
+(define test-info-done (make-hash))
 
 (define (normalize-info-path p)
   (simplify-path (path->complete-path p) #f))
 
-(define (check-xvfb-info dir)
+;; The key for a path listed in the info.rkt of dir
+(define (info-entry-key i dir)
+  (define p (normalize-info-path (path->complete-path i dir)))
+  (if (directory-exists? p)
+      (path->directory-path p)
+      p))
+
+(define (check-test-info dir)
   (define ndir (normalize-info-path dir))
-  (unless (hash-ref xvfb-info-done ndir #f)
-    (hash-set! xvfb-info-done ndir #t)
-    (swallow 'check-xvfb-info dir
+  (unless (hash-ref test-info-done ndir #f)
+    (hash-set! test-info-done ndir #t)
+    (swallow 'check-test-info dir
              (lambda ()
                (define info (get-info/full dir))
                (when info
@@ -37,21 +48,35 @@
                  (when (list? v)
                    (for ([i (in-list v)])
                      (when (path-string? i)
-                       (define p (normalize-info-path (path->complete-path i dir)))
-                       (define dp (if (directory-exists? p)
-                                      (path->directory-path p)
-                                      p))
-                       (hash-set! xvfb-paths dp #t)))))))))
+                       (hash-set! xvfb-paths (info-entry-key i dir) #t))))
+                 (define prefixes (info 'test-command-prefixes (lambda () '())))
+                 (when (list? prefixes)
+                   (for ([e (in-list prefixes)])
+                     (match e
+                       [(list (? path-string? i) (list (? string? words) ...))
+                        (hash-set! command-prefixes (info-entry-key i dir) words)]
+                       [_ (void)]))))))))
 
-(define (path-needs-xvfb? pth trunk-dir)
+;; The value in table for the test at pth, which may be listed itself or
+;; through its directory
+(define (test-info-ref table pth)
   (define-values (base name dir?) (split-path pth))
   (define dir (if (path? base) (path->complete-path base) (current-directory)))
-  (check-xvfb-info dir)
+  (check-test-info dir)
   (let ([p (normalize-info-path pth)])
-    (or (hash-ref xvfb-paths p #f)
+    (or (hash-ref table p #f)
         (let-values ([(base name dir?) (split-path p)])
           (and (path? base)
-               (hash-ref xvfb-paths base #f))))))
+               (hash-ref table base #f))))))
+
+(define (path-needs-xvfb? pth trunk-dir)
+  (test-info-ref xvfb-paths pth))
+
+;; The words to put before the command for the test at pth, from
+;; `test-command-prefixes`; xvfb-run, when the test needs it, still goes
+;; first
+(define (test-command-prefix pth)
+  (or (test-info-ref command-prefixes pth) '()))
 
 ;; Given a test file path, trunk directory, and command, returns
 ;; (values display-string final-cmd) where display-string is "" when
@@ -300,7 +325,8 @@
                       (k (list* (raco-path cs?) rst)))]))
                (cond
                  [pth-cmd
-                  (define cmd (pth-cmd cs? (λ (x) x)))
+                  (define cmd (append (test-command-prefix pth)
+                                      (pth-cmd cs? (λ (x) x))))
                   (define lab (vector cmd (current-seconds) #f 'submit))
                   (submit-job!
                    test-workers lab
@@ -579,9 +605,13 @@
   (define sub (build-path tmp "tests"))
   (make-directory* sub)
 
-  ;; Create info.rkt listing one file and one directory
+  ;; Create info.rkt listing one file and one directory, for xvfb and for
+  ;; command prefixes
   (display-to-file
-   "#lang info\n(define test-xvfb-paths '(\"gui-test.rkt\" \"tests\"))\n"
+   (string-append
+    "#lang info\n(define test-xvfb-paths '(\"gui-test.rkt\" \"tests\"))\n"
+    "(define test-command-prefixes\n"
+    "  '((\"gui-test.rkt\" (\"gdb\" \"--args\")) (\"tests\" (\"rr\" \"record\"))))\n")
    (build-path tmp "info.rkt"))
 
   ;; Create the files so paths resolve
@@ -591,7 +621,7 @@
 
   ;; Clear caches from any prior test run
   (hash-clear! xvfb-paths)
-  (hash-clear! xvfb-info-done)
+  (hash-clear! test-info-done)
 
   ;; File listed directly should match
   (check-true (and (path-needs-xvfb? (build-path tmp "gui-test.rkt") tmp) #t))
@@ -601,6 +631,11 @@
 
   ;; File not listed should not match
   (check-false (path-needs-xvfb? (build-path tmp "other.rkt") tmp))
+
+  ;; Command prefixes follow the same paths
+  (check-equal? (test-command-prefix (build-path tmp "gui-test.rkt")) '("gdb" "--args"))
+  (check-equal? (test-command-prefix (build-path sub "visual.rkt")) '("rr" "record"))
+  (check-equal? (test-command-prefix (build-path tmp "other.rkt")) '())
 
   (delete-directory/files tmp)
 
@@ -612,21 +647,28 @@
   (define tmp2 (make-temporary-file "xvfb-int-~a" 'directory))
 
   (display-to-file
-   "#lang info\n(define test-xvfb-paths '(\"print-display.rkt\"))\n"
+   (string-append
+    "#lang info\n(define test-xvfb-paths '(\"print-display.rkt\"))\n"
+    "(define test-command-prefixes\n"
+    "  '((\"print-display.rkt\" (\"/usr/bin/env\" \"DRDR_PREFIX=yes\"))))\n")
    (build-path tmp2 "info.rkt"))
 
   (display-to-file
-   "#lang racket/base\n(displayln (getenv \"DISPLAY\"))\n"
+   (string-append
+    "#lang racket/base\n(displayln (getenv \"DISPLAY\"))\n"
+    "(printf \"prefix: ~a\\n\" (getenv \"DRDR_PREFIX\"))\n")
    (build-path tmp2 "print-display.rkt"))
 
   (hash-clear! xvfb-paths)
-  (hash-clear! xvfb-info-done)
+  (hash-clear! test-info-done)
 
   (define test-pth (build-path tmp2 "print-display.rkt"))
 
-  ;; Build cmd the same way production code does: raco test <path>
-  (define cmd (list (path->string raco-path)
-                    "test" (path->string test-pth)))
+  ;; Build cmd the same way production code does: raco test <path>, after
+  ;; the test's prefix
+  (define cmd (append (test-command-prefix test-pth)
+                      (list (path->string raco-path)
+                            "test" (path->string test-pth))))
 
   ;; Call the same function the production code calls
   (define-values (display-str final-cmd)
@@ -657,6 +699,8 @@
   (check-true (pair? stdout-lines))
   (check-true (for/or ([l (in-list stdout-lines)])
                 (regexp-match? #rx#"^:" l)))
+  ;; and the test ran under its prefix
+  (check-not-false (member #"prefix: yes" stdout-lines))
 
   (delete-directory/files tmp2))
 
