@@ -939,6 +939,7 @@ in.}
 (require web-server/servlet-env
          web-server/http
          web-server/dispatch
+         web-server/dispatch/extend
          "scm.rkt")
 (define how-many-revs 45)
 (define (show-revisions req)
@@ -1129,13 +1130,36 @@ in.}
                 "Push #" ,(number->string (current-rev)) " does not exist or has not been tested.")
            ,(footer))))))
 
+;; What builds the renderer can show below `static-history-end` cannot
+;; change, so it is written down here: every push from `oldest-build` on
+;; has a build, with logs in a "logs" directory or an archive, except
+;; `missing-builds` (57109-57119 are from the April 2021 disk trouble).
+;; Older pushes, 20000-49999, are kept only in tarballs under
+;; /opt/plt/archived (see s3upload.sh), which the renderer does not read.
+;; Newer pushes are checked against the build directories, so a number
+;; too large to be a push, such as a timestamp, has no build.
+(define oldest-build 50000)
+(define static-history-end 70000)
+(define missing-builds
+  '(56034 56035
+    57109 57110 57111 57112 57113 57114 57115 57116 57117 57118 57119))
+
+(define (known-revision? rev)
+  (cond
+    [(rev . < . oldest-build) #f]
+    [(rev . < . static-history-end) (not (memv rev missing-builds))]
+    [else (directory-exists? (revision-dir rev))]))
+
+;; The newest revision below `this-rev` that has logs, where `this-rev` is
+;; a known revision or one past it
 (define (find-previous-rev this-rev)
-  (if (zero? this-rev)
-      #f
-      (local [(define maybe (sub1 this-rev))]
-        (if (cached-directory-exists? (revision-log-dir maybe))
-            maybe
-            (find-previous-rev maybe)))))
+  (let loop ([rev (sub1 this-rev)])
+    (cond
+      [(rev . < . oldest-build) #f]
+      [(rev . < . static-history-end)
+       (if (known-revision? rev) rev (loop (sub1 rev)))]
+      [(cached-directory-exists? (revision-log-dir rev)) rev]
+      [else (loop (sub1 rev))])))
 
 (define (show-file/prev-change req rev path-to-file)
   (show-file/change -1 rev path-to-file))
@@ -1355,19 +1379,33 @@ in.}
                                        `(tr (td ([colspan "2"]) ,(render-event e)))]))))
                     ,(footer))))))))
 
+;; A revision in a URL comes from outside, so it must name a build: any
+;; other number, such as a timestamp, matches no rule. Otherwise a handler
+;; could walk from it, as `find-previous-rev` does.
+(define (string->known-revision s)
+  (define rev (string->number s))
+  (unless (and (exact-nonnegative-integer? rev) (known-revision? rev))
+    (error 'string->known-revision "not a revision with a build: ~e" s))
+  rev)
+(define-coercion-match-expander known-rev-in/m
+  (make-coerce-safe? string->known-revision) string->known-revision)
+(define-coercion-match-expander known-rev-out/m
+  exact-nonnegative-integer? number->string)
+(define-bidi-match-expander known-rev-arg known-rev-in/m known-rev-out/m)
+
 (define-values (top-dispatch top-url)
   (dispatch-rules
    [("help") show-help]
    [("") show-revisions]
-   [("diff" (integer-arg) (integer-arg) (string-arg) ...) show-diff]
+   [("diff" (known-rev-arg) (known-rev-arg) (string-arg) ...) show-diff]
    [("file-history" (string-arg) ...) show-file-history]
    [("json" "timing" (string-arg) ...) json-timing]
-   [("previous-change" (integer-arg) (string-arg) ...) show-file/prev-change]
-   [("next-change" (integer-arg) (string-arg) ...) show-file/next-change]
+   [("previous-change" (known-rev-arg) (string-arg) ...) show-file/prev-change]
+   [("next-change" (known-rev-arg) (string-arg) ...) show-file/next-change]
    [("current" "") show-revision/current]
    [("current" (string-arg) ...) show-file/current]
-   [((integer-arg) "") show-revision]
-   [((integer-arg) (string-arg) ...) show-file]))
+   [((known-rev-arg) "") show-revision]
+   [((known-rev-arg) (string-arg) ...) show-file]))
 
 (require (only-in net/url url->string))
 (define (log-dispatch req)
@@ -1413,7 +1451,38 @@ in.}
                  #:extra-files-paths (list static)))
 
 (module+ test
-  (require rackunit)
+  (require rackunit
+           racket/file)
+
+  ;; Historical builds are known statically, newer ones from the build
+  ;; directory, so a number that is not a push, such as a timestamp, is
+  ;; rejected at once; walking to the previous revision stops at the
+  ;; oldest build
+  (let ()
+    (define primary (make-temporary-directory))
+    (define (make-build! rev #:logs? [logs? #t])
+      (make-directory* (build-path primary "builds" (number->string rev)
+                                   (if logs? "logs" "analyze"))))
+    (make-build! 70000)
+    (make-build! 70001 #:logs? #f)
+    (make-build! 70002)
+    (parameterize ([plt-directory primary] [extra-build-directory #f])
+      (check-true (known-revision? 50000))
+      (check-true (known-revision? 69999))
+      (check-true (known-revision? 70001))
+      (check-false (known-revision? 49999))
+      (check-false (known-revision? 56034))
+      (check-false (known-revision? 70003))
+      (check-false (known-revision? 1489401258))
+      (check-equal? (find-previous-rev 70002) 70000)
+      (check-equal? (find-previous-rev 70000) 69999)
+      (check-equal? (find-previous-rev 56036) 56033)
+      (check-equal? (find-previous-rev 57120) 57108)
+      (check-false (find-previous-rev 50000))
+      (check-equal? (match "70002" [(known-rev-in/m r) r] [_ #f]) 70002)
+      (check-false (match "1489401258" [(known-rev-in/m r) r] [_ #f]))
+      (check-false (match "x" [(known-rev-in/m r) r] [_ #f])))
+    (delete-directory/files primary))
 
   ;; Test the make-timestamp-span helper function
   (check-equal? (make-timestamp-span "2023-12-25 10:30:45" 1703505045)

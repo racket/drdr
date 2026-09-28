@@ -12,6 +12,7 @@
          web-server/test
          web-server/http
          web-server/servlet-dispatch
+         (only-in web-server/dispatchers/dispatch exn:dispatcher?)
          "dirstruct.rkt"
          "rendering.rkt"
          "status.rkt"
@@ -94,10 +95,10 @@
      (make-directory* (plt-data-directory))
      ;; Use 'cache mode during setup so analyze-logs can write cache files
      (cache/file-mode 'cache)
-     (make-test-revision 100 #:status 'success #:duration-ms 3200 #:author "alice")
-     (make-test-revision 101 #:status 'success #:duration-ms 3400 #:changed? #t #:author "bob")
-     (make-test-revision 102 #:status 'failure #:duration-ms 4100 #:changed? #t #:author "alice")
-     (make-test-revision 103 #:status 'timeout #:duration-ms 90000 #:changed? #t #:author "bob")
+     (make-test-revision 70100 #:status 'success #:duration-ms 3200 #:author "alice")
+     (make-test-revision 70101 #:status 'success #:duration-ms 3400 #:changed? #t #:author "bob")
+     (make-test-revision 70102 #:status 'failure #:duration-ms 4100 #:changed? #t #:author "alice")
+     (make-test-revision 70103 #:status 'timeout #:duration-ms 90000 #:changed? #t #:author "bob")
      ;; Switch to 'no-cache for tests, matching the web server's mode
      (cache/file-mode 'no-cache))
    thunk
@@ -135,25 +136,25 @@
                              (define resp (dispatch-request "http://localhost/"))
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
-                             (check-regexp-match #rx"103" body)
-                             (check-regexp-match #rx"102" body)
-                             (check-regexp-match #rx"101" body)
-                             (check-regexp-match #rx"100" body)
+                             (check-regexp-match #rx"70103" body)
+                             (check-regexp-match #rx"70102" body)
+                             (check-regexp-match #rx"70101" body)
+                             (check-regexp-match #rx"70100" body)
                              (check-regexp-match #rx"alice" body)
                              (check-regexp-match #rx"bob" body))))
 
     (test-case "revision page shows directory listing"
       (call-with-test-data (lambda ()
-                             (define resp (dispatch-request "http://localhost/101/"))
+                             (define resp (dispatch-request "http://localhost/70101/"))
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
                              (check-regexp-match #rx"bob" body)
-                             (check-regexp-match #rx"Test commit for rev 101" body))))
+                             (check-regexp-match #rx"Test commit for rev 70101" body))))
 
     (test-case "file result page shows test output"
       (call-with-test-data (lambda ()
                              (define resp
-                               (dispatch-request (format "http://localhost/101/~a" test-file-path)))
+                               (dispatch-request (format "http://localhost/70101/~a" test-file-path)))
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
                              (check-regexp-match #rx"all tests passed" body)
@@ -163,7 +164,7 @@
     (test-case "failure file result shows stderr"
       (call-with-test-data (lambda ()
                              (define resp
-                               (dispatch-request (format "http://localhost/102/~a" test-file-path)))
+                               (dispatch-request (format "http://localhost/70102/~a" test-file-path)))
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
                              (check-regexp-match #rx"FAILURE" body)
@@ -172,7 +173,7 @@
     (test-case "timeout file result shows timeout"
       (call-with-test-data (lambda ()
                              (define resp
-                               (dispatch-request (format "http://localhost/103/~a" test-file-path)))
+                               (dispatch-request (format "http://localhost/70103/~a" test-file-path)))
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
                              (check-regexp-match #rx"timeout exceeded" body)
@@ -185,9 +186,17 @@
                              (define body (response-body resp))
                              (check-regexp-match #rx"What is DrDr" body))))
 
+    (test-case "a revision that names no build matches no rule"
+      (call-with-test-data
+       (lambda ()
+         (for ([url (in-list '("http://localhost/1489401258/"
+                               "http://localhost/1489401258/pkgs/x.rkt"
+                               "http://localhost/previous-change/1489401258/pkgs/x.rkt"))])
+           (check-exn exn:dispatcher? (lambda () (dispatch-request url)))))))
+
     (test-case "nonexistent file returns not found message"
       (call-with-test-data (lambda ()
-                             (define resp (dispatch-request "http://localhost/101/no/such/file.rkt"))
+                             (define resp (dispatch-request "http://localhost/70101/no/such/file.rkt"))
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
                              (check-regexp-match #rx"does not exist" body))))
@@ -200,10 +209,10 @@
                              (check-equal? (response-code resp) 200)
                              (define body (response-body resp))
                              (check-regexp-match #rx"File History" body)
-                             (check-regexp-match #rx"100" body)
-                             (check-regexp-match #rx"101" body)
-                             (check-regexp-match #rx"102" body)
-                             (check-regexp-match #rx"103" body))))
+                             (check-regexp-match #rx"70100" body)
+                             (check-regexp-match #rx"70101" body)
+                             (check-regexp-match #rx"70102" body)
+                             (check-regexp-match #rx"70103" body))))
 
     (test-case "file history page shows status for each revision"
       (call-with-test-data (lambda ()
@@ -218,7 +227,7 @@
     (test-case "file history page shows stderr status for exit-0 with stderr"
       (call-with-test-data (lambda ()
                              (parameterize ([cache/file-mode 'cache])
-                               (make-test-revision 104 #:status 'stderr #:author "carol"))
+                               (make-test-revision 70104 #:status 'stderr #:author "carol"))
                              (define resp
                                (dispatch-request
                                 (format "http://localhost/file-history/~a" test-file-path)))
@@ -254,22 +263,22 @@
     (test-case "file history page shows pending for incomplete revisions"
       (call-with-test-data (lambda ()
                              ;; Create a revision directory with no "analyzed" marker
-                             (make-directory* (revision-log-dir 104))
-                             (make-directory* (revision-analyze-dir 104))
+                             (make-directory* (revision-log-dir 70104))
+                             (make-directory* (revision-analyze-dir 70104))
                              (define resp
                                (dispatch-request
                                 (format "http://localhost/file-history/~a" test-file-path)))
                              (define body (response-body resp))
-                             (check-regexp-match #rx"104" body)
+                             (check-regexp-match #rx"70104" body)
                              (check-regexp-match #rx"Pending" body)
-                             ;; Should NOT show "Missing" for rev 104
+                             ;; Should NOT show "Missing" for rev 70104
                              ;; (Missing should only appear for completed rev 99 if present)
                              )))
 
     (test-case "file result page links to file history"
       (call-with-test-data (lambda ()
                              (define resp
-                               (dispatch-request (format "http://localhost/101/~a" test-file-path)))
+                               (dispatch-request (format "http://localhost/70101/~a" test-file-path)))
                              (define body (response-body resp))
                              (check-regexp-match #rx"file-history" body)
                              (check-regexp-match #rx"All results for this file" body))))
@@ -280,13 +289,13 @@
       ;; marker files, which fails after archiving deletes them. The fix is to
       ;; use read-cache* which falls through to the archive.
       (call-with-test-data (lambda ()
-                             ;; Archive revs 101, 102, 103 (101 is success,
-                             ;; 102 is failure, 103 is timeout). Rev 100 is
+                             ;; Archive revs 70101, 70102, 70103 (70101 is success,
+                             ;; 70102 is failure, 70103 is timeout). Rev 70100 is
                              ;; skipped because make-archive doesn't archive
                              ;; multiples of 100.
-                             (make-archive 101)
-                             (make-archive 102)
-                             (make-archive 103)
+                             (make-archive 70101)
+                             (make-archive 70102)
+                             (make-archive 70103)
                              (define resp
                                (dispatch-request
                                 (format "http://localhost/file-history/~a" test-file-path)))
