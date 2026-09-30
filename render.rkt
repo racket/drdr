@@ -838,6 +838,14 @@ in.}
 (define test-xvfb-paths '("gui-test.rkt" "tests/visual"))
 }
 
+                                   @h2{Running a test under another command}
+                                   @p{To run a test under a debugger or another tool, list it in the package's @code{info.rkt} using @code{test-command-prefixes}. Each entry pairs a relative path string (a file or a directory, as for @code{test-xvfb-paths}) with a list of strings that DrDr puts before the test's @code{raco test} command. A test that also needs Xvfb runs the prefixed command under @code{xvfb-run}.}
+                                   @pre{
+;; in info.rkt:
+(define test-command-prefixes
+  '(("hangs.rkt" ("/usr/bin/rr" "record"))))
+}
+
                                    @h1{What data is gathered during these runs?}
                                    @p{When each file is run the following is recorded: the start time, the command-line, the STDERR and STDOUT output, the exit code (unless there is a timeout), and the end time. All this information is presented in the per-file DrDr report page.}
                                    
