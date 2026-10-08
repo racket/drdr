@@ -53,9 +53,16 @@
           (and (path? base)
                (hash-ref xvfb-paths base #f))))))
 
+;; Arguments for the window manager at (fluxbox-path), after any display argument
+(define wm-args '("--sm-disable" "--compositor=none"))
+
+;; Runs a command under a window manager; see the script for details
+(define-runtime-path with-wm-path "with-wm.sh")
+
 ;; Given a test file path, trunk directory, and command, returns
 ;; (values display-string final-cmd) where display-string is "" when
 ;; xvfb-run wraps the command, or the given fallback-display otherwise.
+;; Under xvfb-run, the command runs with its own window manager.
 (define (maybe-wrap-xvfb pth trunk-dir cmd fallback-display)
   (define needs-xvfb (path-needs-xvfb? pth trunk-dir))
   (if needs-xvfb
@@ -63,7 +70,12 @@
               (list* "/usr/bin/xvfb-run"
                      "--auto-servernum"
                      "--server-args=-screen 0 1024x768x24"
-                     cmd))
+                     (if (fluxbox-path)
+                         (append (list (bash-path) (path->string with-wm-path) (fluxbox-path))
+                                 wm-args
+                                 (list "--")
+                                 cmd)
+                         cmd)))
       (values fallback-display cmd)))
 
 (define current-env (make-parameter (make-immutable-hash empty)))
@@ -551,9 +563,7 @@
                        (notify! "Starting WM #~a" i)
                        (with-running-program
                         (fluxbox-path)
-                        (list "-d" (format ":~a" i)
-                              "--sm-disable"
-                              "--compositor=none")
+                        (list* "-d" (format ":~a" i) wm-args)
                         inner)))))
 
                  (start-x-server
@@ -572,81 +582,62 @@
  [integrate-revision (exact-nonnegative-integer? . -> . void)])
 
 (module+ test
-  (require rackunit racket/file "status.rkt")
+  (require rackunit "status.rkt")
 
-  ;; Set up a temporary package directory with info.rkt that defines test-xvfb-paths
-  (define tmp (make-temporary-file "xvfb-test-~a" 'directory))
-  (define sub (build-path tmp "tests"))
-  (make-directory* sub)
-
-  ;; Create info.rkt listing one file and one directory
-  (display-to-file
-   "#lang info\n(define test-xvfb-paths '(\"gui-test.rkt\" \"tests\"))\n"
-   (build-path tmp "info.rkt"))
-
-  ;; Create the files so paths resolve
-  (display-to-file "" (build-path tmp "gui-test.rkt"))
-  (display-to-file "" (build-path tmp "other.rkt"))
-  (display-to-file "" (build-path sub "visual.rkt"))
+  ;; tests/xvfb/info.rkt lists gui-test.rkt, print-display.rkt, focus.rkt,
+  ;; and the tests directory in test-xvfb-paths
+  (define-runtime-path xvfb-dir "tests/xvfb")
 
   ;; Clear caches from any prior test run
   (hash-clear! xvfb-paths)
   (hash-clear! xvfb-info-done)
 
   ;; File listed directly should match
-  (check-true (and (path-needs-xvfb? (build-path tmp "gui-test.rkt") tmp) #t))
+  (check-true (and (path-needs-xvfb? (build-path xvfb-dir "gui-test.rkt") xvfb-dir) #t))
 
   ;; File under a listed directory should match
-  (check-true (and (path-needs-xvfb? (build-path sub "visual.rkt") tmp) #t))
+  (check-true (and (path-needs-xvfb? (build-path xvfb-dir "tests" "visual.rkt") xvfb-dir) #t))
 
   ;; File not listed should not match
-  (check-false (path-needs-xvfb? (build-path tmp "other.rkt") tmp))
+  (check-false (path-needs-xvfb? (build-path xvfb-dir "other.rkt") xvfb-dir))
 
-  (delete-directory/files tmp)
-
-  ;; Integration test: maybe-wrap-xvfb drives xvfb-run wrapping of the command
+  ;; Integration tests: maybe-wrap-xvfb drives xvfb-run wrapping of the command
   ;; Find raco next to the currently running racket binary
   (define raco-path
     (build-path (path-only (find-system-path 'exec-file)) "raco"))
 
-  (define tmp2 (make-temporary-file "xvfb-int-~a" 'directory))
+  ;; A window manager for the wrapped commands, or #f if none is installed
+  (define wm
+    (for/first ([p (in-list (list (fluxbox-path) "metacity" "fluxbox"))]
+                #:when p
+                [found (in-value (find-executable-path p))]
+                #:when found)
+      (path->string found)))
 
-  (display-to-file
-   "#lang info\n(define test-xvfb-paths '(\"print-display.rkt\"))\n"
-   (build-path tmp2 "info.rkt"))
-
-  (display-to-file
-   "#lang racket/base\n(displayln (getenv \"DISPLAY\"))\n"
-   (build-path tmp2 "print-display.rkt"))
-
-  (hash-clear! xvfb-paths)
-  (hash-clear! xvfb-info-done)
-
-  (define test-pth (build-path tmp2 "print-display.rkt"))
-
-  ;; Build cmd the same way production code does: raco test <path>
-  (define cmd (list (path->string raco-path)
-                    "test" (path->string test-pth)))
-
-  ;; Call the same function the production code calls
-  (define-values (display-str final-cmd)
-    (maybe-wrap-xvfb test-pth tmp2 cmd ":20"))
-
-  ;; Should have chosen xvfb-run
-  (check-equal? display-str "")
-  (check-equal? (first final-cmd) "/usr/bin/xvfb-run")
-
-  (define result
+  ;; Runs `raco test` on the named file in tests/xvfb, as production code does
+  (define (run-xvfb-test name)
+    (define test-pth (build-path xvfb-dir name))
+    (define cmd (list (path->string raco-path) "test" (path->string test-pth)))
+    (define-values (display-str final-cmd)
+      (parameterize ([fluxbox-path wm])
+        (maybe-wrap-xvfb test-pth xvfb-dir cmd ":20")))
+    ;; Should have chosen xvfb-run
+    (check-equal? display-str "")
+    (check-equal? (first final-cmd) "/usr/bin/xvfb-run")
     (run/collect/wait
      #:env (make-immutable-hash
             (list (cons "PATH" (getenv "PATH"))
                   (cons "DISPLAY" display-str)
+                  ;; the command inherits this process's environment, so keep
+                  ;; GTK off any Wayland session that environment names
+                  (cons "GDK_BACKEND" "x11")
                   (cons "HOME" (path->string (find-system-path 'home-dir)))
                   (cons "TMPDIR" (path->string (find-system-path 'temp-dir)))))
-     #:timeout 30
+     #:timeout 60
      (first final-cmd)
      (rest final-cmd)))
 
+  (define result (run-xvfb-test "print-display.rkt"))
   (check-pred exit? result)
   (check-equal? (exit-code result) 0)
   ;; stdout should contain a DISPLAY value like ":99" set by xvfb-run
@@ -658,7 +649,14 @@
   (check-true (for/or ([l (in-list stdout-lines)])
                 (regexp-match? #rx#"^:" l)))
 
-  (delete-directory/files tmp2))
+  ;; Under xvfb-run, a window manager should focus a newly shown frame
+  (cond
+    [wm
+     (define focus-result (run-xvfb-test "focus.rkt"))
+     (check-pred exit? focus-result)
+     (check-equal? (exit-code focus-result) 0)]
+    [else
+     (printf "skipping the window-manager test: no window manager found\n")]))
 
 (module+ test
   ;; Test get-pkgs-pths: builds a fake trunk with links.rktd and checks
