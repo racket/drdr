@@ -43,15 +43,21 @@
                                       p))
                        (hash-set! xvfb-paths dp #t)))))))))
 
+;; Reports whether the test at `pth` runs under xvfb-run. An info.rkt in any
+;; directory from the test's own up to `trunk-dir` can list the test, or a
+;; directory containing it, in test-xvfb-paths; DrDr may reach the test
+;; before it reaches that info.rkt, so read them all here.
 (define (path-needs-xvfb? pth trunk-dir)
-  (define-values (base name dir?) (split-path pth))
-  (define dir (if (path? base) (path->complete-path base) (current-directory)))
-  (check-xvfb-info dir)
-  (let ([p (normalize-info-path pth)])
-    (or (hash-ref xvfb-paths p #f)
-        (let-values ([(base name dir?) (split-path p)])
-          (and (path? base)
-               (hash-ref xvfb-paths base #f))))))
+  (define p (normalize-info-path pth))
+  (define top (path->directory-path (normalize-info-path trunk-dir)))
+  (define rel (explode-path (find-relative-path top p)))
+  (define ancestors
+    (for/list ([i (in-range (length rel))])
+      (path->directory-path (apply build-path top (take rel i)))))
+  (for ([dir (in-list ancestors)])
+    (check-xvfb-info dir))
+  (for/or ([q (in-list (cons p ancestors))])
+    (hash-ref xvfb-paths q #f)))
 
 ;; Arguments for the window manager at (fluxbox-path), after any display argument
 (define wm-args '("--sm-disable" "--compositor=none"))
@@ -585,21 +591,32 @@
   (require rackunit "status.rkt")
 
   ;; tests/xvfb/info.rkt lists gui-test.rkt, print-display.rkt, focus.rkt,
-  ;; and the tests directory in test-xvfb-paths
+  ;; nested/listed.rkt, and the tests directory in test-xvfb-paths
   (define-runtime-path xvfb-dir "tests/xvfb")
 
-  ;; Clear caches from any prior test run
-  (hash-clear! xvfb-paths)
-  (hash-clear! xvfb-info-done)
+  ;; Checks a path with empty caches, as for the first test DrDr runs in a
+  ;; directory tree, so that no earlier check has read an info.rkt for it
+  (define (needs-xvfb? . elems)
+    (hash-clear! xvfb-paths)
+    (hash-clear! xvfb-info-done)
+    (and (path-needs-xvfb? (apply build-path xvfb-dir elems) xvfb-dir) #t))
 
   ;; File listed directly should match
-  (check-true (and (path-needs-xvfb? (build-path xvfb-dir "gui-test.rkt") xvfb-dir) #t))
+  (check-true (needs-xvfb? "gui-test.rkt"))
 
   ;; File under a listed directory should match
-  (check-true (and (path-needs-xvfb? (build-path xvfb-dir "tests" "visual.rkt") xvfb-dir) #t))
+  (check-true (needs-xvfb? "tests" "visual.rkt"))
 
-  ;; File not listed should not match
-  (check-false (path-needs-xvfb? (build-path xvfb-dir "other.rkt") xvfb-dir))
+  ;; File two levels under a listed directory should match
+  (check-true (needs-xvfb? "tests" "deeper" "deep.rkt"))
+
+  ;; File in a subdirectory, listed by its parent directory's info.rkt,
+  ;; should match
+  (check-true (needs-xvfb? "nested" "listed.rkt"))
+
+  ;; Files not listed should not match
+  (check-false (needs-xvfb? "other.rkt"))
+  (check-false (needs-xvfb? "nested" "unlisted.rkt"))
 
   ;; Integration tests: maybe-wrap-xvfb drives xvfb-run wrapping of the command
   ;; Find raco next to the currently running racket binary
