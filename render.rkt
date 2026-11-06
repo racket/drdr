@@ -785,7 +785,7 @@ in.}
                                    @p{One per core, or @,(number->string (number-of-cpus)).}
                                    
                                    @h1{How long may a file run?}
-                                   @p{The execution timeout is @,(number->string (current-make-install-timeout-seconds)) seconds by default, but the code may set its own timeout internally and well-behaved tests will.}
+                                   @p{@code{raco test} stops a file after @,(number->string (current-subprocess-timeout-seconds)) seconds, unless the file sets a longer timeout in its @code{info.rkt} or @code{config} submodule. A test that blocks in C can keep @code{raco test} from noticing its timeout, so DrDr also kills any file that runs for @,(number->string (current-test-timeout-seconds)) seconds.}
                                    
                                    @h1{May these settings be set on a per-directory basis?}
                                    @p{Yes, if the property is set on any ancestor directory, then its value is used for its descendents when theirs is not set.}

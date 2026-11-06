@@ -10,6 +10,12 @@
 (define current-subprocess-timeout-seconds
   (make-parameter (* 60 10)))
 
+;; DrDr kills a test that runs this long. `raco test` enforces each
+;; test's own timeout, but its timer cannot fire while the test blocks
+;; in C, so this limit must exceed the longest per-test timeout.
+(define current-test-timeout-seconds
+  (make-parameter (* 60 75)))
+
 (define plt-directory
   (make-parameter (build-path (current-directory))))
 
@@ -148,6 +154,7 @@
 
 (provide/contract
  [current-subprocess-timeout-seconds (parameter/c exact-nonnegative-integer?)]
+ [current-test-timeout-seconds (parameter/c exact-nonnegative-integer?)]
  [number-of-cpus (parameter/c exact-nonnegative-integer?)]
  [current-rev (parameter/c (or/c false/c exact-nonnegative-integer?))]
  [previous-rev (parameter/c (or/c false/c exact-nonnegative-integer?))]
