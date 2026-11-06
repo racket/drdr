@@ -349,7 +349,7 @@
                                       (status! 'tmp2)
                                       (run/collect/wait/log
                                         log-pth
-                                        #:timeout (current-make-install-timeout-seconds)
+                                        #:timeout (current-test-timeout-seconds)
                                         #:env (current-env)
                                         (first final-cmd)
                                         (rest final-cmd))))))))
