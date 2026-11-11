@@ -18,46 +18,74 @@
          "sema.rkt"
          "scm.rkt")
 
-;; test-xvfb-paths: hash of normalized-path -> #t
-(define xvfb-paths (make-hash))
-(define xvfb-info-done (make-hash))
+;; What an info.rkt says about running the tests in and under its
+;; directory; each field maps a normalized path (a directory path for a
+;; directory) to a value:
+;;   xvfb: the paths in test-xvfb-paths, to #t
+;;   prefixes: the paths in test-command-prefixes, to their (listof string)
+(struct test-info (xvfb prefixes))
 
 (define (normalize-info-path p)
   (simplify-path (path->complete-path p) #f))
 
-(define (check-xvfb-info dir)
-  (define ndir (normalize-info-path dir))
-  (unless (hash-ref xvfb-info-done ndir #f)
-    (hash-set! xvfb-info-done ndir #t)
-    (swallow 'check-xvfb-info dir
-             (lambda ()
-               (define info (get-info/full dir))
-               (when info
-                 (define v (info 'test-xvfb-paths (lambda () '())))
-                 (when (list? v)
-                   (for ([i (in-list v)])
-                     (when (path-string? i)
-                       (define p (normalize-info-path (path->complete-path i dir)))
-                       (define dp (if (directory-exists? p)
-                                      (path->directory-path p)
-                                      p))
-                       (hash-set! xvfb-paths dp #t)))))))))
+;; The key for a path listed in the info.rkt of dir
+(define (info-entry-key i dir)
+  (define p (normalize-info-path (path->complete-path i dir)))
+  (if (directory-exists? p)
+      (path->directory-path p)
+      p))
 
-;; Reports whether the test at `pth` runs under xvfb-run. An info.rkt in any
-;; directory from the test's own up to `trunk-dir` can list the test, or a
-;; directory containing it, in test-xvfb-paths; DrDr may reach the test
-;; before it reaches that info.rkt, so read them all here.
-(define (path-needs-xvfb? pth trunk-dir)
+(define (read-test-info dir)
+  (define (entries info name)
+    (define v (if info (info name (lambda () '())) '()))
+    (if (list? v) v '()))
+  (swallow 'read-test-info dir
+           #:on-fail (lambda () (test-info (hash) (hash)))
+           (lambda ()
+             (define info (get-info/full dir))
+             (test-info
+              (for/hash ([i (in-list (entries info 'test-xvfb-paths))]
+                         #:when (path-string? i))
+                (values (info-entry-key i dir) #t))
+              (for/hash ([e (in-list (entries info 'test-command-prefixes))]
+                         #:when (match e
+                                  [(list (? path-string?) (list (? string?) ...)) #t]
+                                  [_ #f]))
+                (values (info-entry-key (first e) dir) (second e)))))))
+
+;; The test-info for dir, memoized because DrDr asks about every test in a
+;; directory tree
+(define test-info-cache (make-hash))
+(define (dir-test-info dir)
+  (hash-ref! test-info-cache (normalize-info-path dir)
+             (lambda () (read-test-info dir))))
+
+;; The value in the `field` of some test-info for the test at `pth`, which
+;; may be listed itself or through a directory containing it; the most
+;; specific entry wins. An info.rkt in any directory from the test's own up
+;; to `trunk-dir` can list the test.
+(define (test-info-ref field pth trunk-dir)
   (define p (normalize-info-path pth))
   (define top (path->directory-path (normalize-info-path trunk-dir)))
   (define rel (explode-path (find-relative-path top p)))
+  ;; nearest first
   (define ancestors
-    (for/list ([i (in-range (length rel))])
-      (path->directory-path (apply build-path top (take rel i)))))
-  (for ([dir (in-list ancestors)])
-    (check-xvfb-info dir))
-  (for/or ([q (in-list (cons p ancestors))])
-    (hash-ref xvfb-paths q #f)))
+    (reverse
+     (for/list ([i (in-range (length rel))])
+       (path->directory-path (apply build-path top (take rel i))))))
+  (for*/or ([q (in-list (cons p ancestors))]
+            [dir (in-list ancestors)])
+    (hash-ref (field (dir-test-info dir)) q #f)))
+
+;; Reports whether the test at `pth` runs under xvfb-run
+(define (path-needs-xvfb? pth trunk-dir)
+  (test-info-ref test-info-xvfb pth trunk-dir))
+
+;; The words to put before the command for the test at `pth`, from
+;; `test-command-prefixes`; xvfb-run, when the test needs it, still goes
+;; first
+(define (test-command-prefix pth trunk-dir)
+  (or (test-info-ref test-info-prefixes pth trunk-dir) '()))
 
 ;; Arguments for the window manager at (fluxbox-path), after any display argument
 (define wm-args '("--sm-disable" "--compositor=none"))
@@ -318,7 +346,8 @@
                       (k (list* (raco-path cs?) rst)))]))
                (cond
                  [pth-cmd
-                  (define cmd (pth-cmd cs? (λ (x) x)))
+                  (define cmd (append (test-command-prefix pth trunk-dir)
+                                      (pth-cmd cs? (λ (x) x))))
                   (define lab (vector cmd (current-seconds) #f 'submit))
                   (submit-job!
                    test-workers lab
@@ -591,15 +620,14 @@
   (require rackunit "status.rkt")
 
   ;; tests/xvfb/info.rkt lists gui-test.rkt, print-display.rkt, focus.rkt,
-  ;; nested/listed.rkt, and the tests directory in test-xvfb-paths
+  ;; nested/listed.rkt, and the tests directory in test-xvfb-paths, and
+  ;; gives some of them command prefixes
   (define-runtime-path xvfb-dir "tests/xvfb")
 
-  ;; Checks a path with empty caches, as for the first test DrDr runs in a
-  ;; directory tree, so that no earlier check has read an info.rkt for it
   (define (needs-xvfb? . elems)
-    (hash-clear! xvfb-paths)
-    (hash-clear! xvfb-info-done)
     (and (path-needs-xvfb? (apply build-path xvfb-dir elems) xvfb-dir) #t))
+  (define (command-prefix . elems)
+    (test-command-prefix (apply build-path xvfb-dir elems) xvfb-dir))
 
   ;; File listed directly should match
   (check-true (needs-xvfb? "gui-test.rkt"))
@@ -618,6 +646,12 @@
   (check-false (needs-xvfb? "other.rkt"))
   (check-false (needs-xvfb? "nested" "unlisted.rkt"))
 
+  ;; Command prefixes follow the same paths, and the most specific entry wins
+  (check-equal? (command-prefix "gui-test.rkt") '("gdb" "--args"))
+  (check-equal? (command-prefix "tests" "visual.rkt") '("rr" "record"))
+  (check-equal? (command-prefix "tests" "deeper" "deep.rkt") '("strace" "-f"))
+  (check-equal? (command-prefix "other.rkt") '())
+
   ;; Integration tests: maybe-wrap-xvfb drives xvfb-run wrapping of the command
   ;; Find raco next to the currently running racket binary
   (define raco-path
@@ -631,10 +665,12 @@
                 #:when found)
       (path->string found)))
 
-  ;; Runs `raco test` on the named file in tests/xvfb, as production code does
+  ;; Runs `raco test` on the named file in tests/xvfb, after the file's
+  ;; prefix, as production code does
   (define (run-xvfb-test name)
     (define test-pth (build-path xvfb-dir name))
-    (define cmd (list (path->string raco-path) "test" (path->string test-pth)))
+    (define cmd (append (test-command-prefix test-pth xvfb-dir)
+                        (list (path->string raco-path) "test" (path->string test-pth))))
     (define-values (display-str final-cmd)
       (parameterize ([fluxbox-path wm])
         (maybe-wrap-xvfb test-pth xvfb-dir cmd ":20")))
@@ -665,6 +701,8 @@
   (check-true (pair? stdout-lines))
   (check-true (for/or ([l (in-list stdout-lines)])
                 (regexp-match? #rx#"^:" l)))
+  ;; and the test ran under its prefix
+  (check-not-false (member #"prefix: yes" stdout-lines))
 
   ;; Under xvfb-run, a window manager should focus a newly shown frame
   (cond
