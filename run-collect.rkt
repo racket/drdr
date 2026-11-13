@@ -128,14 +128,15 @@
 ;; the last element of `rev-dir`, the build's directory, and output matches
 ;; only where the whole directory appears, so other occurrences of the push
 ;; number's digits, such as in a git checksum, survive.
-(define (scrub-output s rev-dir tmp home cwd)
+(define (scrub-output s rev-dir tmp home)
   (define rev-dir/scrubbed
     (apply build-path (append (drop-right (explode-path rev-dir) 1)
                               (list "<current-rev>"))))
+  ;; keep the separator after a directory in the output
+  (define (no-trailing-separator dir) (regexp-replace #rx"/+$" dir ""))
   (regexp-replace** ([(path->string rev-dir) (path->string rev-dir/scrubbed)]
-                     [tmp "<tmp>"]
-                     [home "<home>"]
-                     [(path->string cwd) "<cwd>"])
+                     [(no-trailing-separator tmp) "<tmp>"]
+                     [(no-trailing-separator home) "<home>"])
                     s))
 
 (define (run/collect/wait/log log-path command 
@@ -151,9 +152,8 @@
      (define rev-dir (revision-dir (current-rev)))
      (define home (hash-ref env "HOME"))
      (define tmp (hash-ref env "TMPDIR"))
-     (define cwd (current-directory))
      (define (rewrite s)
-       (scrub-output s rev-dir tmp home cwd))
+       (scrub-output s rev-dir tmp home))
      
      (set! ran? #t)
      (rewrite-status
@@ -183,16 +183,15 @@
 (module+ test
   (require rackunit)
 
-  ;; the callers' `cwd` ends in a separator, as `(current-directory)` does
   (define (scrub s)
     (scrub-output s (string->path "/opt/plt/builds/73506")
-                  "/tmp/x/" "/home/jay"
-                  (string->path "/opt/plt/builds/73506/trunk/")))
+                  "/tmp/x/" "/home/jay"))
 
   (check-equal? (scrub "/opt/plt/builds/73506/logs/pkgs/base")
                 "/opt/plt/builds/<current-rev>/logs/pkgs/base")
-  (check-equal? (scrub "/opt/plt/builds/73506/trunk/racket") "<cwd>racket")
-  (check-equal? (scrub "/tmp/x/foo") "<tmp>foo")
+  (check-equal? (scrub "/opt/plt/builds/73506/trunk/racket")
+                "/opt/plt/builds/<current-rev>/trunk/racket")
+  (check-equal? (scrub "/tmp/x/foo") "<tmp>/foo")
   (check-equal? (scrub "/home/jay/.racket") "<home>/.racket")
   ;; expeditor's checksum on push 73506, and a bare mention of the number
   (check-equal? (scrub "65e20a410bdc5f09c0682a1bb57cac2b68d73506")
