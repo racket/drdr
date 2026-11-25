@@ -238,21 +238,7 @@
                                    (format "    ~a" (path->url f)))
                                  ""))
                          "")
-                  empty))))))
-  
-  ; Send message to IRC
-  (send-mail-message "drdr-notify@racket-lang.org"
-                     (format "http://drdr.racket-lang.org/~a/" 
-                             cur-rev)
-                     (list "eli+ircbot@eli.barzilay.org")
-                     empty empty
-                     (list* (format " (abs ~a) (sum ~a) ~a"
-                                    (format-duration-ms abs-dur)
-                                    (format-duration-ms duration)
-                                    totals)
-                            (if (empty? responsibles)
-                                empty
-                                (list (apply string-append (add-between responsibles " ")))))))
+                  empty)))))))
 ; End Email
 
 (define (build-path* x y)
